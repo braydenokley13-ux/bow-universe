@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { getViewer } from "@/server/auth";
 
+import { MainNav } from "./main-nav";
 import { SignOutButton } from "./sign-out-button";
 
 const navItems = [
@@ -58,17 +59,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
 
-          <nav className="flex flex-wrap gap-2">
-            {navItems.map((item) => (
-              <Link
-                key={item.href}
-                href={item.href}
-                className="rounded-full border border-line bg-white/50 px-4 py-2 text-sm text-ink/75 hover:border-accent hover:text-ink"
-              >
-                {item.label}
-              </Link>
-            ))}
-          </nav>
+          <MainNav items={navItems} />
         </div>
       </header>
 

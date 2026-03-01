@@ -1,3 +1,8 @@
+import { getServerSession } from "next-auth";
+import { redirect } from "next/navigation";
+
+import { authOptions } from "@/server/auth-options";
+
 export type Viewer = {
   id: string;
   name: string;
@@ -6,13 +11,36 @@ export type Viewer = {
 };
 
 export async function getViewer(): Promise<Viewer | null> {
-  return null;
+  const session = await getServerSession(authOptions);
+
+  if (!session?.user?.id || !session.user.email || !session.user.name) {
+    return null;
+  }
+
+  return {
+    id: session.user.id,
+    name: session.user.name,
+    email: session.user.email,
+    role: session.user.role ?? "STUDENT"
+  };
 }
 
 export async function requireUser() {
-  throw new Error("Authentication is not implemented yet.");
+  const viewer = await getViewer();
+
+  if (!viewer) {
+    redirect("/login");
+  }
+
+  return viewer;
 }
 
 export async function requireAdmin() {
-  throw new Error("Admin authentication is not implemented yet.");
+  const viewer = await requireUser();
+
+  if (viewer.role !== "ADMIN") {
+    redirect("/");
+  }
+
+  return viewer;
 }
