@@ -37,3 +37,43 @@ a {
 .table-shell {
   @apply overflow-hidden rounded-2xl border border-line bg-panel/95 shadow-panel;
 }
+
+@media print {
+  html,
+  body {
+    background: #ffffff !important;
+    color: #111111 !important;
+  }
+
+  .print-hide {
+    display: none !important;
+  }
+
+  .panel,
+  .table-shell {
+    background: #ffffff !important;
+    border-color: rgba(17, 24, 39, 0.18) !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+  }
+
+  a {
+    color: #111111 !important;
+    text-decoration: none !important;
+  }
+
+  .print-publication {
+    max-width: none !important;
+    gap: 1.5rem !important;
+  }
+
+  .print-publication section,
+  .print-publication article,
+  .print-publication aside {
+    break-inside: avoid;
+  }
+
+  .print-key-box {
+    background: #f5f5f5 !important;
+  }
+}

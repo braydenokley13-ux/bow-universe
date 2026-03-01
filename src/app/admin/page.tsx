@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { Badge } from "@/components/badge";
 import { SectionHeading } from "@/components/section-heading";
 import {
@@ -12,7 +14,7 @@ import { getAdminPageData } from "@/server/data";
 
 export default async function AdminPage() {
   await requireAdmin();
-  const { users, issues, proposals, currentSeason, rulesets, teams, activity } = await getAdminPageData();
+  const { users, issues, proposals, currentSeason, rulesets, teams, activity, publications } = await getAdminPageData();
 
   return (
     <div className="space-y-8">
@@ -159,8 +161,14 @@ export default async function AdminPage() {
                     >
                       <option value="DRAFT">DRAFT</option>
                       <option value="SUBMITTED">SUBMITTED</option>
+                      <option value="REVISION_REQUESTED">REVISION_REQUESTED</option>
+                      <option value="APPROVED_FOR_INTERNAL_PUBLICATION">APPROVED_FOR_INTERNAL_PUBLICATION</option>
+                      <option value="READY_FOR_VOTING">READY_FOR_VOTING</option>
                       <option value="VOTING">VOTING</option>
                       <option value="DECISION">DECISION</option>
+                      <option value="PUBLISHED_INTERNAL">PUBLISHED_INTERNAL</option>
+                      <option value="MARKED_EXTERNAL_READY">MARKED_EXTERNAL_READY</option>
+                      <option value="APPROVED_FOR_EXTERNAL_PUBLICATION">APPROVED_FOR_EXTERNAL_PUBLICATION</option>
                     </select>
                     <input
                       name="voteStart"
@@ -224,6 +232,48 @@ export default async function AdminPage() {
             ))}
           </div>
         </article>
+      </section>
+
+      <section className="panel p-6">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="font-display text-2xl text-ink">Publication archive controls</h3>
+            <p className="mt-2 text-sm leading-6 text-ink/70">
+              Internal publications can also be flagged as externally ready so the archive stays
+              prepared for future web and PDF release.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <Badge>{publications.length} archived</Badge>
+            <Link
+              href="/admin/publications"
+              className="rounded-full border border-line bg-white/80 px-4 py-2 text-sm font-medium text-ink"
+            >
+              Open publication queue
+            </Link>
+          </div>
+        </div>
+
+        <div className="mt-5 space-y-3">
+          {publications.map((publication) => (
+            <div key={publication.id} className="rounded-2xl border border-line bg-white/60 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="font-medium text-ink">{publication.title}</p>
+                  <p className="mt-1 text-sm text-ink/62">
+                    {publication.publicationType.replaceAll("_", " ")}
+                    {publication.issue ? ` · ${publication.issue.title}` : ""}
+                    {publication.team ? ` · ${publication.team.name}` : ""}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {publication.externalReady ? <Badge tone="success">External ready</Badge> : <Badge>Internal only</Badge>}
+                  {publication.externalApproved ? <Badge tone="success">External approved</Badge> : null}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       </section>
 
       <section className="panel p-6">

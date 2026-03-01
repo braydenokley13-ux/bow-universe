@@ -19,11 +19,34 @@ enum MarketSizeTier {
   MEGA
 }
 
+enum LaneTag {
+  TOOL_BUILDERS
+  POLICY_REFORM_ARCHITECTS
+  STRATEGIC_OPERATORS
+  ECONOMIC_INVESTIGATORS
+}
+
+enum SubmissionStatus {
+  DRAFT
+  SUBMITTED
+  REVISION_REQUESTED
+  APPROVED_FOR_INTERNAL_PUBLICATION
+  PUBLISHED_INTERNAL
+  MARKED_EXTERNAL_READY
+  APPROVED_FOR_EXTERNAL_PUBLICATION
+}
+
 enum ProposalStatus {
   DRAFT
   SUBMITTED
+  REVISION_REQUESTED
+  APPROVED_FOR_INTERNAL_PUBLICATION
+  READY_FOR_VOTING
   VOTING
   DECISION
+  PUBLISHED_INTERNAL
+  MARKED_EXTERNAL_READY
+  APPROVED_FOR_EXTERNAL_PUBLICATION
 }
 
 enum VoteValue {
@@ -50,6 +73,31 @@ enum ProjectType {
   PROPOSAL_SUPPORT
 }
 
+enum PublicationType {
+  TOOL_BRIEF
+  POLICY_MEMO
+  TEAM_STRATEGY_DOSSIER
+  RESEARCH_BRIEF
+}
+
+enum FeedbackType {
+  CLARITY
+  EVIDENCE
+  REASONING
+  STRUCTURE
+  REVISION_REQUEST
+}
+
+enum PublicationSourceType {
+  PROJECT
+  PROPOSAL
+}
+
+enum ExternalPublicationTarget {
+  WEB
+  PDF
+}
+
 model User {
   id                    String                 @id @default(cuid())
   name                  String
@@ -66,6 +114,11 @@ model User {
   decisions             CommissionerDecision[] @relation("DecisionByUser")
   projectCollaborations ProjectCollaborator[]
   activityEvents        ActivityEvent[]        @relation("ActivityByUser")
+  projectFeedback       ProjectFeedback[]      @relation("ProjectFeedbackByUser")
+  proposalFeedback      ProposalFeedback[]     @relation("ProposalFeedbackByUser")
+  projectRevisions      ProjectRevision[]      @relation("ProjectRevisionByUser")
+  proposalRevisions     ProposalRevision[]     @relation("ProposalRevisionByUser")
+  publishedPublications Publication[]          @relation("PublicationPublishedBy")
 }
 
 model Team {
@@ -80,6 +133,7 @@ model Team {
   teamSeasons          TeamSeason[]
   projects             Project[]
   issues               Issue[]
+  publications         Publication[]
 }
 
 model Season {
@@ -90,6 +144,7 @@ model Season {
   createdAt       DateTime    @default(now())
   activeRuleSet   RuleSet     @relation("SeasonActiveRuleSet", fields: [activeRuleSetId], references: [id], onDelete: Restrict)
   teamSeasons     TeamSeason[]
+  publications    Publication[]
 
   @@index([activeRuleSetId])
   @@index([createdAt])
@@ -147,31 +202,52 @@ model RuleSet {
 }
 
 model Proposal {
-  id                String                 @id @default(cuid())
-  title             String
-  issueId           String
-  createdByUserId   String
-  status            ProposalStatus         @default(DRAFT)
-  ruleSetIdTarget   String
-  diffJson          Json
-  narrativeJson     Json
-  sandboxResultJson Json?
-  voteStart         DateTime?
-  voteEnd           DateTime?
-  createdAt         DateTime               @default(now())
-  updatedAt         DateTime               @updatedAt
-  issue             Issue                  @relation(fields: [issueId], references: [id], onDelete: Restrict)
-  createdBy         User                   @relation("ProposalCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  targetRuleSet     RuleSet                @relation("ProposalTargetRuleSet", fields: [ruleSetIdTarget], references: [id], onDelete: Restrict)
-  votes             Vote[]
-  decision          CommissionerDecision?
+  id                               String                 @id @default(cuid())
+  title                            String
+  issueId                          String
+  createdByUserId                  String
+  status                           ProposalStatus         @default(DRAFT)
+  publicationType                  PublicationType        @default(POLICY_MEMO)
+  ruleSetIdTarget                  String
+  diffJson                         Json
+  narrativeJson                    Json
+  contentJson                      Json?
+  reviewChecklistJson              Json?
+  sandboxResultJson                Json?
+  abstract                         String?
+  methodsSummary                   String?
+  keyTakeawaysJson                 Json?
+  referencesJson                   Json?
+  keywordsJson                     Json?
+  publicationSummary               String?
+  publicationSlug                  String?                @unique
+  publicationVersion               Int                    @default(1)
+  voteStart                        DateTime?
+  voteEnd                          DateTime?
+  submittedAt                      DateTime?
+  revisionRequestedAt              DateTime?
+  approvedForInternalPublicationAt DateTime?
+  readyForVotingAt                 DateTime?
+  publishedInternalAt              DateTime?
+  markedExternalReadyAt            DateTime?
+  approvedForExternalPublicationAt DateTime?
+  createdAt                        DateTime               @default(now())
+  updatedAt                        DateTime               @updatedAt
+  issue                            Issue                  @relation(fields: [issueId], references: [id], onDelete: Restrict)
+  createdBy                        User                   @relation("ProposalCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  targetRuleSet                    RuleSet                @relation("ProposalTargetRuleSet", fields: [ruleSetIdTarget], references: [id], onDelete: Restrict)
+  votes                            Vote[]
+  decision                         CommissionerDecision?
   supportingProjects Project[]
-  sourceRuleSets    RuleSet[]              @relation("RuleSetSourceProposal")
+  sourceRuleSets                   RuleSet[]              @relation("RuleSetSourceProposal")
+  feedbackEntries                  ProposalFeedback[]
+  revisions                        ProposalRevision[]
 
   @@index([issueId])
   @@index([createdByUserId])
   @@index([ruleSetIdTarget])
   @@index([status])
+  @@index([publicationSlug])
   @@index([createdAt])
   @@index([voteStart, voteEnd])
 }
@@ -221,6 +297,7 @@ model Issue {
   proposals       Proposal[]
   primaryProjects Project[]    @relation("PrimaryProjectIssue")
   projectLinks    ProjectIssue[]
+  publications    Publication[]
 
   @@index([status])
   @@index([severity])
@@ -230,31 +307,55 @@ model Issue {
 }
 
 model Project {
-  id                   String                @id @default(cuid())
-  title                String
-  summary              String
-  projectType          ProjectType
-  laneTagsJson         Json
-  issueId              String?
-  teamId               String?
-  supportingProposalId String?
-  artifactLinksJson    Json
-  findingsMd          String
-  createdByUserId     String
-  createdAt           DateTime              @default(now())
-  updatedAt           DateTime              @updatedAt
-  primaryIssue        Issue?                @relation("PrimaryProjectIssue", fields: [issueId], references: [id], onDelete: SetNull)
-  team                Team?                 @relation(fields: [teamId], references: [id], onDelete: SetNull)
-  supportingProposal  Proposal?             @relation(fields: [supportingProposalId], references: [id], onDelete: SetNull)
-  createdBy           User                  @relation("ProjectCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  issueLinks          ProjectIssue[]
-  collaborators       ProjectCollaborator[]
-  comments            ProjectComment[]
+  id                               String           @id @default(cuid())
+  title                            String
+  summary                          String
+  projectType                      ProjectType
+  submissionStatus                 SubmissionStatus @default(DRAFT)
+  publicationType                  PublicationType
+  lanePrimary                      LaneTag?
+  laneTagsJson                     Json
+  issueId                          String?
+  teamId                           String?
+  supportingProposalId             String?
+  artifactLinksJson                Json
+  findingsMd                       String
+  contentJson                      Json?
+  reviewChecklistJson              Json?
+  abstract                         String?
+  essentialQuestion                String?
+  methodsSummary                   String?
+  keyTakeawaysJson                 Json?
+  referencesJson                   Json?
+  keywordsJson                     Json?
+  publicationSummary               String?
+  publicationSlug                  String?          @unique
+  publicationVersion               Int              @default(1)
+  createdByUserId                  String
+  submittedAt                      DateTime?
+  revisionRequestedAt              DateTime?
+  approvedForInternalPublicationAt DateTime?
+  publishedInternalAt              DateTime?
+  markedExternalReadyAt            DateTime?
+  approvedForExternalPublicationAt DateTime?
+  createdAt                        DateTime         @default(now())
+  updatedAt                        DateTime         @updatedAt
+  primaryIssue                     Issue?           @relation("PrimaryProjectIssue", fields: [issueId], references: [id], onDelete: SetNull)
+  team                             Team?            @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  supportingProposal               Proposal?        @relation(fields: [supportingProposalId], references: [id], onDelete: SetNull)
+  createdBy                        User             @relation("ProjectCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  issueLinks                       ProjectIssue[]
+  collaborators                    ProjectCollaborator[]
+  comments                         ProjectComment[]
+  feedbackEntries                  ProjectFeedback[]
+  revisions                        ProjectRevision[]
 
   @@index([issueId])
   @@index([teamId])
   @@index([createdByUserId])
   @@index([projectType])
+  @@index([submissionStatus])
+  @@index([publicationSlug])
   @@index([supportingProposalId])
   @@index([createdAt])
 }
@@ -291,6 +392,120 @@ model ProjectComment {
   @@index([projectId])
   @@index([userId])
   @@index([createdAt])
+}
+
+model ProjectFeedback {
+  id              String       @id @default(cuid())
+  projectId       String
+  sectionKey      String
+  feedbackType    FeedbackType
+  body            String
+  createdByUserId String
+  createdAt       DateTime     @default(now())
+  project         Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy       User         @relation("ProjectFeedbackByUser", fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([createdByUserId])
+  @@index([createdAt])
+}
+
+model ProposalFeedback {
+  id              String       @id @default(cuid())
+  proposalId      String
+  sectionKey      String
+  feedbackType    FeedbackType
+  body            String
+  createdByUserId String
+  createdAt       DateTime     @default(now())
+  proposal        Proposal     @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  createdBy       User         @relation("ProposalFeedbackByUser", fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  @@index([proposalId])
+  @@index([createdByUserId])
+  @@index([createdAt])
+}
+
+model ProjectRevision {
+  id              String   @id @default(cuid())
+  projectId       String
+  snapshotJson    Json
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy       User     @relation("ProjectRevisionByUser", fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([createdByUserId])
+  @@index([createdAt])
+}
+
+model ProposalRevision {
+  id              String   @id @default(cuid())
+  proposalId      String
+  snapshotJson    Json
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  proposal        Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  createdBy       User     @relation("ProposalRevisionByUser", fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  @@index([proposalId])
+  @@index([createdByUserId])
+  @@index([createdAt])
+}
+
+model Publication {
+  id                 String                    @id @default(cuid())
+  slug               String                    @unique
+  title              String
+  publicationType    PublicationType
+  sourceType         PublicationSourceType
+  sourceId           String
+  lanePrimary        LaneTag?
+  abstract           String
+  summary            String
+  keywordsJson       Json?
+  citationText       String
+  authorLine         String
+  publishedAt        DateTime
+  publishedByUserId  String
+  seasonId           String?
+  issueId            String?
+  teamId             String?
+  externalReady      Boolean                   @default(false)
+  externalApproved   Boolean                   @default(false)
+  externalTargetsJson Json?
+  canonicalVersion   Int                       @default(1)
+  layoutVersion      Int                       @default(1)
+  metadataJson       Json?
+  publishedBy        User                      @relation("PublicationPublishedBy", fields: [publishedByUserId], references: [id], onDelete: Restrict)
+  season             Season?                   @relation(fields: [seasonId], references: [id], onDelete: SetNull)
+  issue              Issue?                    @relation(fields: [issueId], references: [id], onDelete: SetNull)
+  team               Team?                     @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  exports            PublicationExport[]
+
+  @@unique([sourceType, sourceId])
+  @@index([publishedByUserId])
+  @@index([seasonId])
+  @@index([issueId])
+  @@index([teamId])
+  @@index([publicationType])
+  @@index([lanePrimary])
+  @@index([publishedAt])
+}
+
+model PublicationExport {
+  id           String                    @id @default(cuid())
+  publicationId String
+  target       ExternalPublicationTarget
+  status       String
+  generatedAt  DateTime?
+  artifactUrl  String?
+  notes        String?
+  publication  Publication               @relation(fields: [publicationId], references: [id], onDelete: Cascade)
+
+  @@unique([publicationId, target])
+  @@index([status])
 }
 
 model ActivityEvent {

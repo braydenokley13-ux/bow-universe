@@ -12,6 +12,7 @@ const navItems = [
   { href: "/issues", label: "Issues" },
   { href: "/projects", label: "Projects" },
   { href: "/proposals", label: "Proposals" },
+  { href: "/research", label: "Research" },
   { href: "/admin", label: "Admin" }
 ];
 
@@ -20,7 +21,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen">
-      <header className="border-b border-line/80 bg-panel/70 backdrop-blur-md">
+      <header className="print-hide border-b border-line/80 bg-panel/70 backdrop-blur-md">
         <div className="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-6 lg:px-8">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div className="space-y-2">
@@ -63,7 +64,9 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <main className="mx-auto flex max-w-7xl flex-col gap-8 px-4 py-8 lg:px-8">{children}</main>
+      <main className="mx-auto flex max-w-7xl flex-col gap-8 px-4 py-8 lg:px-8 print:max-w-none print:px-0 print:py-0">
+        {children}
+      </main>
     </div>
   );
 }

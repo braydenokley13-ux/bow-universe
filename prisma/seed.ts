@@ -1,5 +1,12 @@
 import { hash } from "bcryptjs";
-import { Prisma, ProjectType, ProposalStatus, UserRole, VoteValue } from "@prisma/client";
+import {
+  Prisma,
+  ProjectType,
+  ProposalStatus,
+  SubmissionStatus,
+  UserRole,
+  VoteValue
+} from "@prisma/client";
 
 import {
   activityFeed,
@@ -9,8 +16,20 @@ import {
   ruleSets,
   teams
 } from "../src/lib/demo-data";
+import {
+  backfillProjectContent,
+  backfillProposalContent,
+  buildExternalReadinessChecklist,
+  buildProjectChecklist,
+  buildProposalChecklist,
+  createPublicationSlug,
+  getPrimaryLaneTag,
+  projectTypeToPublicationType
+} from "../src/lib/publications";
 import { prisma } from "../src/lib/prisma";
+import type { ReferenceEntry } from "../src/lib/types";
 import { slugify } from "../src/lib/utils";
+import { syncProjectPublication, syncProposalPublication } from "../src/server/publications";
 
 const defaultPassword = "bowuniverse";
 
@@ -77,11 +96,37 @@ function voteSchedule(status: ProposalStatus) {
   };
 }
 
+function projectSeedStatus(index: number) {
+  if (index === 0) {
+    return SubmissionStatus.APPROVED_FOR_EXTERNAL_PUBLICATION;
+  }
+
+  if (index === 1 || index === 2) {
+    return SubmissionStatus.MARKED_EXTERNAL_READY;
+  }
+
+  return SubmissionStatus.PUBLISHED_INTERNAL;
+}
+
+function proposalSeedStatus(status: ProposalStatus) {
+  if (status === ProposalStatus.DECISION) {
+    return ProposalStatus.DECISION;
+  }
+
+  return status;
+}
+
 async function main() {
   const passwordHash = await hash(defaultPassword, 10);
   const names = uniqueNames();
   const studentNames = names.filter((name) => name !== "Commissioner Avery");
 
+  await prisma.publicationExport.deleteMany();
+  await prisma.publication.deleteMany();
+  await prisma.proposalFeedback.deleteMany();
+  await prisma.projectFeedback.deleteMany();
+  await prisma.proposalRevision.deleteMany();
+  await prisma.projectRevision.deleteMany();
   await prisma.activityEvent.deleteMany();
   await prisma.projectComment.deleteMany();
   await prisma.projectCollaborator.deleteMany();
@@ -210,8 +255,54 @@ async function main() {
 
   const proposalIds = new Map<string, string>();
   for (const proposal of proposals) {
-    const status = proposal.status as ProposalStatus;
+    const status = proposalSeedStatus(proposal.status as ProposalStatus);
     const schedule = voteSchedule(status);
+    const content = backfillProposalContent(proposal.narrative);
+    const references: ReferenceEntry[] = [
+      {
+        label: "BOW League Rules",
+        url: "https://bow.local/rules",
+        sourceType: "DATASET",
+        note: "Active rule environment used for the memo."
+      },
+      {
+        label: "Issue docket",
+        url: `https://bow.local/issues/${proposal.issueId}`,
+        sourceType: "ARTICLE",
+        note: "Connected issue record."
+      }
+    ];
+    const keywords = proposal.title
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(Boolean)
+      .slice(0, 6);
+    const keyTakeaways = [proposal.narrative.expectedImpact, proposal.narrative.tradeoffs].filter(Boolean);
+    const reviewChecklist = buildProposalChecklist({
+      title: proposal.title,
+      abstract: proposal.narrative.problem,
+      content: {
+        ...content,
+        sandboxInterpretation:
+          proposal.sandbox.explanation[0] ?? "The sandbox suggests a measurable system change."
+      },
+      references,
+      keywords,
+      sandboxInterpretationSaved: true
+    });
+    const externalChecklist = buildExternalReadinessChecklist({
+      title: proposal.title,
+      abstract: proposal.narrative.problem,
+      slug: createPublicationSlug(proposal.title, proposal.id),
+      references,
+      keywords,
+      requiredSections: [
+        { label: "Problem", value: content.problem },
+        { label: "Current rule context", value: content.currentRuleContext },
+        { label: "Impact analysis", value: content.impactAnalysis },
+        { label: "Recommendation", value: proposal.narrative.proposedChange }
+      ]
+    });
     const createdProposal = await prisma.proposal.create({
       data: {
         id: proposal.id,
@@ -219,10 +310,29 @@ async function main() {
         issueId: issueIds.get(proposal.issueId)!,
         createdByUserId: userMap.get(proposal.createdBy)!,
         status,
+        abstract: proposal.narrative.problem,
+        methodsSummary: "Compared baseline rules to the proposal diff using the BOW sandbox model.",
         ruleSetIdTarget: ruleSetIds.get(proposal.ruleSetTargetId)!,
         diffJson: asJson(proposal.diff),
         narrativeJson: asJson(proposal.narrative),
+        contentJson: asJson({
+          ...content,
+          sandboxInterpretation:
+            proposal.sandbox.explanation[0] ?? "The sandbox shows a measurable league effect.",
+          recommendation: proposal.narrative.proposedChange
+        }),
+        reviewChecklistJson: asJson([...reviewChecklist, ...externalChecklist]),
         sandboxResultJson: asJson(proposal.sandbox),
+        keyTakeawaysJson: asJson(keyTakeaways),
+        referencesJson: asJson(references),
+        keywordsJson: asJson(keywords),
+        publicationSummary: proposal.narrative.expectedImpact,
+        publicationSlug: createPublicationSlug(proposal.title, proposal.id),
+        submittedAt: status === ProposalStatus.DRAFT ? null : new Date("2028-10-21T12:00:00Z"),
+        approvedForInternalPublicationAt:
+          status === ProposalStatus.DECISION ? new Date("2028-10-30T12:00:00Z") : null,
+        publishedInternalAt:
+          status === ProposalStatus.DECISION ? new Date("2028-11-02T12:00:00Z") : null,
         voteStart: schedule.voteStart,
         voteEnd: schedule.voteEnd,
         createdAt: new Date("2028-10-20T12:00:00Z")
@@ -259,16 +369,79 @@ async function main() {
         }
       });
     }
+
+    await syncProposalPublication({
+      proposalId: createdProposal.id,
+      actorUserId: userMap.get("Commissioner Avery")!
+    });
   }
 
   const projectIds = new Map<string, string>();
-  for (const project of projects) {
+  for (const [index, project] of projects.entries()) {
+    const lanePrimary = getPrimaryLaneTag(project.laneTags, project.projectType as ProjectType);
+    const content = backfillProjectContent({
+      summary: project.summary,
+      findingsMd: project.findings.map((line) => `- ${line}`).join("\n"),
+      projectType: project.projectType as ProjectType,
+      laneTags: project.laneTags,
+      artifactLinks: project.artifactLinks
+    });
+    const references: ReferenceEntry[] = [
+      ...project.artifactLinks.map(
+        (artifact): ReferenceEntry => ({
+        label: artifact.label,
+        url: artifact.url,
+        sourceType: "TOOL",
+        note: "Linked project artifact."
+      })
+      ),
+      {
+        label: "Issue docket",
+        url: `https://bow.local/issues/${project.issueIds[0] ?? ""}`,
+        sourceType: "DATASET",
+        note: "Connected issue context."
+      }
+    ];
+    const keywords = project.title
+      .toLowerCase()
+      .split(/[^a-z0-9]+/)
+      .filter(Boolean)
+      .slice(0, 6);
+    const keyTakeaways = project.findings.slice(0, 3);
+    const submissionStatus = projectSeedStatus(index);
+    const reviewChecklist = buildProjectChecklist(
+      {
+        title: project.title,
+        abstract: project.summary,
+        essentialQuestion: content.questionOrMission,
+        content,
+        references,
+        keywords
+      },
+      lanePrimary
+    );
+    const externalChecklist = buildExternalReadinessChecklist({
+      title: project.title,
+      abstract: project.summary,
+      slug: createPublicationSlug(project.title, project.id),
+      references,
+      keywords,
+      requiredSections: [
+        { label: "Overview", value: content.overview },
+        { label: "Evidence", value: content.evidence },
+        { label: "Analysis", value: content.analysis },
+        { label: "Recommendations", value: content.recommendations }
+      ]
+    });
     const createdProject = await prisma.project.create({
       data: {
         id: project.id,
         title: project.title,
         summary: project.summary,
         projectType: project.projectType as ProjectType,
+        submissionStatus,
+        publicationType: projectTypeToPublicationType(project.projectType as ProjectType, lanePrimary),
+        lanePrimary,
         laneTagsJson: asJson(project.laneTags),
         issueId: project.issueIds[0] ? issueIds.get(project.issueIds[0])! : null,
         teamId: project.teamId ? teamIds.get(project.teamId)! : null,
@@ -277,6 +450,28 @@ async function main() {
           : null,
         artifactLinksJson: asJson(project.artifactLinks),
         findingsMd: project.findings.map((line) => `- ${line}`).join("\n"),
+        contentJson: asJson(content),
+        reviewChecklistJson: asJson([...reviewChecklist, ...externalChecklist]),
+        abstract: project.summary,
+        essentialQuestion: content.questionOrMission,
+        methodsSummary: "Built from league records, issue context, and linked artifacts inside the BOW Universe.",
+        keyTakeawaysJson: asJson(keyTakeaways),
+        referencesJson: asJson(references),
+        keywordsJson: asJson(keywords),
+        publicationSummary: project.summary,
+        publicationSlug: createPublicationSlug(project.title, project.id),
+        submittedAt: new Date(project.createdAt),
+        approvedForInternalPublicationAt: new Date("2028-10-26T12:00:00Z"),
+        publishedInternalAt: new Date("2028-10-30T12:00:00Z"),
+        markedExternalReadyAt:
+          submissionStatus === SubmissionStatus.MARKED_EXTERNAL_READY ||
+          submissionStatus === SubmissionStatus.APPROVED_FOR_EXTERNAL_PUBLICATION
+            ? new Date("2028-11-04T12:00:00Z")
+            : null,
+        approvedForExternalPublicationAt:
+          submissionStatus === SubmissionStatus.APPROVED_FOR_EXTERNAL_PUBLICATION
+            ? new Date("2028-11-07T12:00:00Z")
+            : null,
         createdByUserId: userMap.get(project.createdBy)!,
         createdAt: new Date(project.createdAt)
       }
@@ -315,6 +510,11 @@ async function main() {
         }
       });
     }
+
+    await syncProjectPublication({
+      projectId: createdProject.id,
+      actorUserId: userMap.get("Commissioner Avery")!
+    });
   }
 
   await prisma.ruleSet.update({

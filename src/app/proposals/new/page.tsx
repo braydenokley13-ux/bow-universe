@@ -22,9 +22,14 @@ export default async function NewProposalPage() {
       {viewer ? (
         <div className="space-y-4">
           <div className="flex items-center justify-end">
-            <Badge tone="success">Sandbox ready</Badge>
+            <Badge tone="success">Memo studio</Badge>
           </div>
-          <ProposalForm issues={issues} ruleSets={ruleSets} action={createProposalAction} />
+          <ProposalForm
+            issues={issues}
+            ruleSets={ruleSets}
+            action={createProposalAction}
+            intentLabel="Submit for review"
+          />
         </div>
       ) : (
         <div className="panel p-6">

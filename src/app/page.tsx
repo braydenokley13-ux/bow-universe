@@ -118,10 +118,16 @@ export default async function HomePage() {
               Draft proposal
             </Link>
             <Link
-              href="/projects"
+              href="/projects/new"
               className="rounded-full border border-line bg-white/70 px-4 py-2 text-sm font-medium text-ink"
             >
-              Publish project
+              Start project
+            </Link>
+            <Link
+              href="/research"
+              className="rounded-full border border-line bg-white/70 px-4 py-2 text-sm font-medium text-ink"
+            >
+              Research archive
             </Link>
             {viewer?.role === "ADMIN" ? (
               <form action={advanceSeasonAction}>
