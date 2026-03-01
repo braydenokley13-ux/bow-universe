@@ -540,16 +540,22 @@ export function ProjectStudioForm({
         />
 
         {values.laneTags.map((laneTag) => (
-          <input key={laneTag} type="hidden" name="laneTags" value={laneTag} readOnly />
+          <input key={`lane-tag-${laneTag}`} type="hidden" name="laneTags" value={laneTag} readOnly />
         ))}
         {values.issueIds.map((issueId) => (
-          <input key={issueId} type="hidden" name="issueIds" value={issueId} readOnly />
+          <input key={`issue-${issueId}`} type="hidden" name="issueIds" value={issueId} readOnly />
         ))}
         {values.collaboratorIds.map((collaboratorId) => (
-          <input key={collaboratorId} type="hidden" name="collaboratorIds" value={collaboratorId} readOnly />
+          <input
+            key={`collaborator-${collaboratorId}`}
+            type="hidden"
+            name="collaboratorIds"
+            value={collaboratorId}
+            readOnly
+          />
         ))}
         {values.laneSections.map((section) => (
-          <div key={section.key}>
+          <div key={`lane-section-${section.key}`}>
             <input type="hidden" name={`laneSectionTitle_${section.key}`} value={section.title} readOnly />
             <input type="hidden" name={`laneSectionPrompt_${section.key}`} value={section.prompt} readOnly />
             <input type="hidden" name={`laneSectionValue_${section.key}`} value={section.value} readOnly />

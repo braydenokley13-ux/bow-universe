@@ -131,19 +131,25 @@ export default async function AdminPublicationsPage() {
                     <p>
                       Source state:{" "}
                       <span className="font-medium text-ink">
-                        {publication.sourceType === PublicationSourceType.PROJECT
-                          ? submissionStatusLabels[(publication.sourceStatus as SubmissionStatus | undefined) ?? SubmissionStatus.PUBLISHED_INTERNAL]
-                          : (publication.sourceStatus ?? "Unknown").replaceAll("_", " ")}
+                        {publication.sourceStatus
+                          ? publication.sourceType === PublicationSourceType.PROJECT
+                            ? submissionStatusLabels[publication.sourceStatus as SubmissionStatus]
+                            : publication.sourceStatus.replaceAll("_", " ")
+                          : "Source record missing or not loaded"}
                       </span>
                     </p>
                   </div>
 
-                  {publication.sourceType === PublicationSourceType.PROJECT ? (
+                  {!publication.sourceStatus ? (
+                    <div className="mt-4 rounded-2xl border border-warn/20 bg-warn/10 px-4 py-3 text-sm leading-6 text-ink/72">
+                      This archive record is missing a live source workflow state, so review controls are disabled until the source record is restored or resynced.
+                    </div>
+                  ) : publication.sourceType === PublicationSourceType.PROJECT ? (
                     <form action={reviewProjectAction} className="mt-4 space-y-3">
                       <input type="hidden" name="projectId" value={publication.sourceId} />
                       <select
                         name="submissionStatus"
-                        defaultValue={(publication.sourceStatus as SubmissionStatus | undefined) ?? SubmissionStatus.PUBLISHED_INTERNAL}
+                        defaultValue={publication.sourceStatus as SubmissionStatus}
                         className="w-full rounded-2xl border border-line bg-white px-4 py-3 text-sm text-ink outline-none focus:border-accent"
                       >
                         {projectReviewStatuses.map((status) => (
@@ -164,7 +170,7 @@ export default async function AdminPublicationsPage() {
                       <input type="hidden" name="proposalId" value={publication.sourceId} />
                       <select
                         name="status"
-                        defaultValue={(publication.sourceStatus as ProposalStatus | undefined) ?? ProposalStatus.PUBLISHED_INTERNAL}
+                        defaultValue={publication.sourceStatus as ProposalStatus}
                         className="w-full rounded-2xl border border-line bg-white px-4 py-3 text-sm text-ink outline-none focus:border-accent"
                       >
                         {proposalReviewStatuses.map((status) => (

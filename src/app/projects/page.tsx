@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PublicationSourceType } from "@prisma/client";
 
 import { Badge } from "@/components/badge";
 import { SectionHeading } from "@/components/section-heading";
@@ -19,6 +20,9 @@ const laneCards: LaneTag[] = [
 export default async function ProjectsPage() {
   const viewer = await getViewer();
   const { projects, recentPublications } = await getProjectsPageData();
+  const recentProjectPublications = recentPublications.filter(
+    (publication) => publication.sourceType === PublicationSourceType.PROJECT
+  );
   const drafts = viewer
     ? projects.filter(
         (project) =>
@@ -132,38 +136,44 @@ export default async function ProjectsPage() {
                 </div>
               </div>
             ) : null}
-            {openStudioWork.map((project) => {
-              const parsed = parseProjectJson(project);
+            {openStudioWork.length > 0 ? (
+              openStudioWork.map((project) => {
+                const parsed = parseProjectJson(project);
 
-              return (
-                <Link
-                  key={project.id}
-                  href={`/projects/${project.id}`}
-                  className="block rounded-2xl border border-line bg-white/60 p-4 hover:border-accent"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <p className="font-medium text-ink">{project.title}</p>
-                      <p className="mt-2 text-sm leading-6 text-ink/68">{project.abstract ?? project.summary}</p>
+                return (
+                  <Link
+                    key={project.id}
+                    href={`/projects/${project.id}`}
+                    className="block rounded-2xl border border-line bg-white/60 p-4 hover:border-accent"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="font-medium text-ink">{project.title}</p>
+                        <p className="mt-2 text-sm leading-6 text-ink/68">{project.abstract ?? project.summary}</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Badge>{publicationTypeLabels[project.publicationType]}</Badge>
+                        <Badge tone="warn">{submissionStatusLabels[project.submissionStatus]}</Badge>
+                      </div>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Badge>{publicationTypeLabels[project.publicationType]}</Badge>
-                      <Badge tone="warn">{submissionStatusLabels[project.submissionStatus]}</Badge>
-                    </div>
-                  </div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    <span className="rounded-full border border-line bg-mist/70 px-3 py-1 text-xs text-ink/68">
-                      {getLaneLabel(parsed.lanePrimary)}
-                    </span>
-                    {project.team ? (
+                    <div className="mt-3 flex flex-wrap gap-2">
                       <span className="rounded-full border border-line bg-mist/70 px-3 py-1 text-xs text-ink/68">
-                        {project.team.name}
+                        {getLaneLabel(parsed.lanePrimary)}
                       </span>
-                    ) : null}
-                  </div>
-                </Link>
-              );
-            })}
+                      {project.team ? (
+                        <span className="rounded-full border border-line bg-mist/70 px-3 py-1 text-xs text-ink/68">
+                          {project.team.name}
+                        </span>
+                      ) : null}
+                    </div>
+                  </Link>
+                );
+              })
+            ) : (
+              <p className="rounded-2xl border border-dashed border-line px-4 py-6 text-sm text-ink/60">
+                No studio projects are open right now.
+              </p>
+            )}
           </div>
         </article>
 
@@ -174,8 +184,8 @@ export default async function ProjectsPage() {
           </div>
 
           <div className="mt-6 space-y-4">
-            {recentPublications.length > 0 ? (
-              recentPublications.map((publication) => (
+            {recentProjectPublications.length > 0 ? (
+              recentProjectPublications.map((publication) => (
                 <Link
                   key={publication.id}
                   href={`/research/${publication.slug}`}
@@ -191,7 +201,7 @@ export default async function ProjectsPage() {
               ))
             ) : (
               <p className="rounded-2xl border border-dashed border-line px-4 py-6 text-sm text-ink/60">
-                No publications have been archived yet.
+                No project publications have been archived yet.
               </p>
             )}
           </div>
