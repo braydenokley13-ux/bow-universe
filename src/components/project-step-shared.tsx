@@ -7,26 +7,26 @@ import type {
   CoachStepEvaluationLike
 } from "@/lib/coach-ui";
 
-type ProposalStepLayoutProps = {
+type ProjectStepLayoutProps = {
   step: CoachStepDefinitionLike;
   evaluation: CoachStepEvaluationLike;
   warningItems?: string[];
   children: ReactNode;
 };
 
-type ProposalFieldBlockProps = {
+type ProjectFieldBlockProps = {
   label: string;
   detail: string;
   children: ReactNode;
   coach?: ReactNode;
 };
 
-export function ProposalStepLayout({
+export function ProjectStepLayout({
   step,
   evaluation,
   warningItems,
   children
-}: ProposalStepLayoutProps) {
+}: ProjectStepLayoutProps) {
   return (
     <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
       <div className="panel p-6">
@@ -54,12 +54,12 @@ export function ProposalStepLayout({
   );
 }
 
-export function ProposalFieldBlock({
+export function ProjectFieldBlock({
   label,
   detail,
   children,
   coach
-}: ProposalFieldBlockProps) {
+}: ProjectFieldBlockProps) {
   return (
     <div className="rounded-[28px] border border-line bg-white/65 p-5">
       <div>
@@ -72,58 +72,7 @@ export function ProposalFieldBlock({
   );
 }
 
-type StepTextareaProps = {
-  id: string;
-  name?: string;
-  rows?: number;
-  value: string;
-  placeholder: string;
-  onChange: (value: string) => void;
-};
-
-type StepInputProps = {
-  id: string;
-  name?: string;
-  value: string;
-  placeholder: string;
-  onChange: (value: string) => void;
-};
-
-export function StepTextarea({
-  id,
-  name,
-  rows = 5,
-  value,
-  placeholder,
-  onChange
-}: StepTextareaProps) {
-  return (
-    <textarea
-      id={id}
-      name={name}
-      rows={rows}
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      placeholder={placeholder}
-      className="w-full rounded-2xl border border-line bg-white/90 px-4 py-3 text-sm leading-6 text-ink outline-none focus:border-accent"
-    />
-  );
-}
-
-export function StepInput({ id, name, value, placeholder, onChange }: StepInputProps) {
-  return (
-    <input
-      id={id}
-      name={name}
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      placeholder={placeholder}
-      className="w-full rounded-2xl border border-line bg-white/90 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-    />
-  );
-}
-
-export function statusSummaryCard(evaluation: CoachFieldEvaluationLike, title = "Field status") {
+export function projectStatusSummaryCard(evaluation: CoachFieldEvaluationLike, title = "Field status") {
   return (
     <div className="rounded-2xl border border-line bg-white/70 p-4">
       <p className="font-medium text-ink">{title}</p>

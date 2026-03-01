@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Badge } from "@/components/badge";
 import { SectionHeading } from "@/components/section-heading";
 import { getLaneLabel, getLaneTemplate } from "@/lib/publications";
+import { getLanePrompt } from "@/lib/discovery-guidance";
 import { parseProjectJson } from "@/server/data";
 import { getViewer } from "@/server/auth";
 import { getProjectsPageData } from "@/server/data";
@@ -25,13 +26,19 @@ export default async function ProjectsPage() {
           (project.submissionStatus === "DRAFT" || project.submissionStatus === "REVISION_REQUESTED")
       )
     : [];
+  const openStudioWork = projects.filter((project) =>
+    ["DRAFT", "SUBMITTED", "REVISION_REQUESTED", "APPROVED_FOR_INTERNAL_PUBLICATION"].includes(project.submissionStatus)
+  );
+  const publishedWork = projects.filter((project) =>
+    ["PUBLISHED_INTERNAL", "MARKED_EXTERNAL_READY", "APPROVED_FOR_EXTERNAL_PUBLICATION"].includes(project.submissionStatus)
+  );
 
   return (
     <div className="space-y-8">
       <SectionHeading
         eyebrow="Projects"
         title="Research studio and publication registry"
-        description="Projects now move through a clearer research workflow. Students can start in any lane, draft structured work, revise it with feedback, and publish stronger final artifacts into the research archive."
+        description="This page now helps students choose the right lane, resume open studio work, and trace how a draft eventually becomes published research."
       />
 
       <section className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
@@ -47,9 +54,7 @@ export default async function ProjectsPage() {
                 {getLaneLabel(lane)}
               </p>
               <h3 className="mt-3 font-display text-2xl text-ink">{template.outputLabel}</h3>
-              <p className="mt-3 text-sm leading-6 text-ink/68">
-                Start a guided draft with prompts shaped for this lane.
-              </p>
+              <p className="mt-3 text-sm leading-6 text-ink/68">{getLanePrompt(lane)}</p>
             </Link>
           );
         })}
@@ -61,7 +66,7 @@ export default async function ProjectsPage() {
             <div>
               <h3 className="font-display text-2xl text-ink">Continue your work</h3>
               <p className="mt-2 text-sm leading-6 text-ink/70">
-                Drafts and revision requests stay visible here so students can return to them.
+                Drafts and revision requests stay visible here so you can return to the next weak section quickly.
               </p>
             </div>
             <Badge>{drafts.length} open</Badge>
@@ -97,15 +102,15 @@ export default async function ProjectsPage() {
         </section>
       ) : null}
 
-      <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+      <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
         <article className="panel p-6">
           <div className="flex items-center justify-between gap-3">
-            <h3 className="font-display text-2xl text-ink">Project registry</h3>
-            <Badge>{projects.length} total</Badge>
+            <h3 className="font-display text-2xl text-ink">Open studio work</h3>
+            <Badge>{openStudioWork.length}</Badge>
           </div>
 
           <div className="mt-6 space-y-4">
-            {projects.map((project) => {
+            {openStudioWork.map((project) => {
               const parsed = parseProjectJson(project);
 
               return (
@@ -121,17 +126,7 @@ export default async function ProjectsPage() {
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Badge>{publicationTypeLabels[project.publicationType]}</Badge>
-                      <Badge
-                        tone={
-                          ["PUBLISHED_INTERNAL", "MARKED_EXTERNAL_READY", "APPROVED_FOR_EXTERNAL_PUBLICATION"].includes(
-                            project.submissionStatus
-                          )
-                            ? "success"
-                            : "warn"
-                        }
-                      >
-                        {submissionStatusLabels[project.submissionStatus]}
-                      </Badge>
+                      <Badge tone="warn">{submissionStatusLabels[project.submissionStatus]}</Badge>
                     </div>
                   </div>
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -152,8 +147,8 @@ export default async function ProjectsPage() {
 
         <article className="panel p-6">
           <div className="flex items-center justify-between gap-3">
-            <h3 className="font-display text-2xl text-ink">Recent publications</h3>
-            <Badge>{recentPublications.length}</Badge>
+            <h3 className="font-display text-2xl text-ink">Published work</h3>
+            <Badge>{publishedWork.length}</Badge>
           </div>
 
           <div className="mt-6 space-y-4">

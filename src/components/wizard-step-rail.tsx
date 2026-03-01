@@ -1,22 +1,18 @@
-import {
-  getStepStatusLabel,
-  type ProposalCoachStepId,
-  type ProposalCoachStepStatus
-} from "@/lib/proposal-wizard";
+import { getStepStatusLabel, type CoachStepStatus } from "@/lib/coach-ui";
 
-type WizardStepRailProps = {
+type WizardStepRailProps<StepId extends string> = {
   items: Array<{
-    id: ProposalCoachStepId;
+    id: StepId;
     title: string;
     shortTitle: string;
-    status: ProposalCoachStepStatus;
+    status: CoachStepStatus;
     current: boolean;
     disabled: boolean;
   }>;
-  onSelect: (stepId: ProposalCoachStepId) => void;
+  onSelect: (stepId: StepId) => void;
 };
 
-function toneForStatus(status: ProposalCoachStepStatus, current: boolean) {
+function toneForStatus(status: CoachStepStatus, current: boolean) {
   if (current) {
     return "border-accent bg-accent text-white";
   }
@@ -36,7 +32,10 @@ function toneForStatus(status: ProposalCoachStepStatus, current: boolean) {
   return "border-line bg-white/75 text-ink/68";
 }
 
-export function WizardStepRail({ items, onSelect }: WizardStepRailProps) {
+export function WizardStepRail<StepId extends string>({
+  items,
+  onSelect
+}: WizardStepRailProps<StepId>) {
   return (
     <nav className="rounded-[28px] border border-line bg-panel/85 p-4 shadow-panel">
       <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Coach path</p>

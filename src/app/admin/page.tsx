@@ -2,6 +2,11 @@ import Link from "next/link";
 
 import { Badge } from "@/components/badge";
 import { SectionHeading } from "@/components/section-heading";
+import { AdminDecisionDesk } from "@/components/admin-decision-desk";
+import { AdminIssueWorkbench } from "@/components/admin-issue-workbench";
+import { AdminProposalWorkflowCard } from "@/components/admin-proposal-workflow-card";
+import { AdminQueueSummary } from "@/components/admin-queue-summary";
+import { AdminRoleCard } from "@/components/admin-role-card";
 import {
   advanceSeasonAction,
   recordDecisionAction,
@@ -11,17 +16,33 @@ import {
 } from "@/server/actions";
 import { requireAdmin } from "@/server/auth";
 import { getAdminPageData } from "@/server/data";
+import { getProposalReviewReadiness } from "@/lib/review-readiness";
+import { shouldShowDecisionDesk } from "@/lib/workflow-guards";
 
 export default async function AdminPage() {
   await requireAdmin();
   const { users, issues, proposals, currentSeason, rulesets, teams, activity, publications } = await getAdminPageData();
+
+  const proposalReadiness = new Map(
+    proposals.map((proposal) => [proposal.id, getProposalReviewReadiness(proposal)])
+  );
+  const workflowQueue = proposals.filter((proposal) =>
+    ["SUBMITTED", "REVISION_REQUESTED", "APPROVED_FOR_INTERNAL_PUBLICATION", "READY_FOR_VOTING", "VOTING", "DECISION"].includes(proposal.status)
+  );
+  const decisionQueue = proposals.filter((proposal) => shouldShowDecisionDesk(proposal.status));
+  const issueCleanupQueue = issues.filter(
+    (issue) => issue.severity >= 4 || !issue.evidenceMd || JSON.stringify(issue.metricsJson ?? {}) === "{}"
+  );
+  const publicationQueue = publications.filter(
+    (publication) => !publication.externalApproved || !publication.externalReady
+  );
 
   return (
     <div className="space-y-8">
       <SectionHeading
         eyebrow="Admin"
         title="Commissioner workspace"
-        description="This page is now protected by real credentials auth. It gives the commissioner direct control over issues, proposal states, and user roles."
+        description="This workspace now shows what needs action, what is blocked, and what should happen next before a commissioner moves workflow state."
       />
 
       <section className="grid gap-4 md:grid-cols-3">
@@ -39,12 +60,45 @@ export default async function AdminPage() {
         </div>
       </section>
 
+      <AdminQueueSummary
+        items={[
+          {
+            title: "Workflow review",
+            count: workflowQueue.length,
+            detail: "Submitted and in-flight proposals that still need commissioner workflow attention.",
+            href: "#proposal-workflow",
+            tone: workflowQueue.length > 0 ? "warn" : "success"
+          },
+          {
+            title: "Decision desk",
+            count: decisionQueue.length,
+            detail: "Proposals that are close enough to a final commissioner decision to review now.",
+            href: "#decision-desk",
+            tone: decisionQueue.length > 0 ? "warn" : "success"
+          },
+          {
+            title: "Issue cleanup",
+            count: issueCleanupQueue.length,
+            detail: "High-pressure or incomplete issue records that still need evidence or metrics cleanup.",
+            href: "#issue-workbench",
+            tone: issueCleanupQueue.length > 0 ? "warn" : "success"
+          },
+          {
+            title: "Archive review",
+            count: publicationQueue.length,
+            detail: "Archive records that still need external readiness or export queue attention.",
+            href: "/admin/publications",
+            tone: publicationQueue.length > 0 ? "warn" : "success"
+          }
+        ]}
+      />
+
       <section className="panel p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="font-display text-2xl text-ink">Season controls</h3>
             <p className="mt-2 text-sm leading-6 text-ink/70">
-              Advance the league one season at a time. This recalculates all team snapshots, applies any pending ruleset, and logs new threshold issues.
+              Advance the league one season at a time. This recalculates team snapshots, applies the pending ruleset, and records new pressure points.
             </p>
           </div>
           <form action={advanceSeasonAction}>
@@ -58,189 +112,64 @@ export default async function AdminPage() {
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
-        <article className="panel p-6">
-          <div className="flex items-center justify-between gap-3">
-            <h3 className="font-display text-2xl text-ink">Create issue</h3>
-            <Badge>{issues.length} tracked</Badge>
+      <div id="issue-workbench">
+        <AdminIssueWorkbench issues={issues} teams={teams} action={saveIssueAction} />
+      </div>
+
+      <section id="proposal-workflow" className="panel p-6">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Proposal workflow desk</p>
+            <h3 className="mt-3 font-display text-2xl text-ink">Guide workflow state safely</h3>
           </div>
+          <Badge>{workflowQueue.length} open</Badge>
+        </div>
 
-          <form action={saveIssueAction} className="mt-5 space-y-4">
-            <input
-              name="title"
-              placeholder="Issue title"
-              className="w-full rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
+        <div className="mt-6 space-y-4">
+          {workflowQueue.map((proposal) => (
+            <AdminProposalWorkflowCard
+              key={proposal.id}
+              proposal={proposal}
+              readiness={proposalReadiness.get(proposal.id)!}
+              action={updateProposalStatusAction}
             />
-            <input
-              name="slug"
-              placeholder="issue-slug"
-              className="w-full rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-            />
-            <textarea
-              name="description"
-              rows={4}
-              placeholder="Issue description"
-              className="w-full rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-            />
-            <div className="grid gap-4 md:grid-cols-3">
-              <select
-                name="severity"
-                defaultValue="3"
-                className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-              >
-                {[1, 2, 3, 4, 5].map((severity) => (
-                  <option key={severity} value={severity}>
-                    Severity {severity}
-                  </option>
-                ))}
-              </select>
-              <select
-                name="status"
-                defaultValue="OPEN"
-                className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-              >
-                <option value="OPEN">OPEN</option>
-                <option value="IN_REVIEW">IN_REVIEW</option>
-                <option value="RESOLVED">RESOLVED</option>
-              </select>
-              <select
-                name="teamId"
-                defaultValue=""
-                className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-              >
-                <option value="">League-wide issue</option>
-                {teams.map((team) => (
-                  <option key={team.id} value={team.id}>
-                    {team.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <textarea
-              name="metricsJson"
-              rows={4}
-              defaultValue="{}"
-              className="w-full rounded-2xl border border-line bg-white/80 px-4 py-3 font-mono text-sm text-ink outline-none focus:border-accent"
-            />
-            <textarea
-              name="evidenceMd"
-              rows={4}
-              placeholder="- Evidence line one"
-              className="w-full rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-            />
-            <button
-              type="submit"
-              className="rounded-full border border-accent bg-accent px-4 py-2 text-sm font-medium text-white"
-            >
-              Create issue
-            </button>
-          </form>
-        </article>
+          ))}
+        </div>
+      </section>
 
-        <article className="panel p-6">
-          <h3 className="font-display text-2xl text-ink">Proposal workflow</h3>
-          <div className="mt-5 space-y-4">
-            {proposals.map((proposal) => (
-              <div key={proposal.id} className="rounded-2xl border border-line bg-white/60 p-4">
-                <form action={updateProposalStatusAction} className="space-y-4">
-                  <input type="hidden" name="proposalId" value={proposal.id} />
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <div>
-                      <p className="font-medium text-ink">{proposal.title}</p>
-                      <p className="mt-1 text-sm text-ink/62">
-                        {proposal.issue.title} · RuleSet v{proposal.targetRuleSet.version}
-                      </p>
-                    </div>
-                    <Badge>{proposal.status.replace("_", " ")}</Badge>
-                  </div>
-                  <div className="grid gap-4 md:grid-cols-3">
-                    <select
-                      name="status"
-                      defaultValue={proposal.status}
-                      className="rounded-2xl border border-line bg-white px-4 py-2 text-sm text-ink outline-none focus:border-accent"
-                    >
-                      <option value="DRAFT">DRAFT</option>
-                      <option value="SUBMITTED">SUBMITTED</option>
-                      <option value="REVISION_REQUESTED">REVISION_REQUESTED</option>
-                      <option value="APPROVED_FOR_INTERNAL_PUBLICATION">APPROVED_FOR_INTERNAL_PUBLICATION</option>
-                      <option value="READY_FOR_VOTING">READY_FOR_VOTING</option>
-                      <option value="VOTING">VOTING</option>
-                      <option value="DECISION">DECISION</option>
-                      <option value="PUBLISHED_INTERNAL">PUBLISHED_INTERNAL</option>
-                      <option value="MARKED_EXTERNAL_READY">MARKED_EXTERNAL_READY</option>
-                      <option value="APPROVED_FOR_EXTERNAL_PUBLICATION">APPROVED_FOR_EXTERNAL_PUBLICATION</option>
-                    </select>
-                    <input
-                      name="voteStart"
-                      type="datetime-local"
-                      defaultValue={
-                        proposal.voteStart
-                          ? new Date(proposal.voteStart).toISOString().slice(0, 16)
-                          : ""
-                      }
-                      className="rounded-2xl border border-line bg-white px-4 py-2 text-sm text-ink outline-none focus:border-accent"
-                    />
-                    <input
-                      name="voteEnd"
-                      type="datetime-local"
-                      defaultValue={
-                        proposal.voteEnd ? new Date(proposal.voteEnd).toISOString().slice(0, 16) : ""
-                      }
-                      className="rounded-2xl border border-line bg-white px-4 py-2 text-sm text-ink outline-none focus:border-accent"
-                    />
-                  </div>
-                  <button
-                    type="submit"
-                    className="rounded-full border border-accent bg-accent px-4 py-2 text-sm font-medium text-white"
-                  >
-                    Save workflow
-                  </button>
-                </form>
-
-                <form action={recordDecisionAction} className="mt-4 space-y-3 rounded-2xl border border-line/70 bg-white/60 p-4">
-                  <input type="hidden" name="proposalId" value={proposal.id} />
-                  <div className="grid gap-3 md:grid-cols-[0.8fr_1.2fr]">
-                    <select
-                      name="decision"
-                      defaultValue="APPROVE"
-                      className="rounded-2xl border border-line bg-white px-4 py-2 text-sm text-ink outline-none focus:border-accent"
-                    >
-                      <option value="APPROVE">APPROVE</option>
-                      <option value="DENY">DENY</option>
-                      <option value="AMEND">AMEND</option>
-                    </select>
-                    <input
-                      name="notes"
-                      placeholder="Decision notes"
-                      className="rounded-2xl border border-line bg-white px-4 py-2 text-sm text-ink outline-none focus:border-accent"
-                    />
-                  </div>
-                  <textarea
-                    name="amendedDiffJson"
-                    rows={4}
-                    placeholder='Optional amended diff JSON for AMEND'
-                    className="w-full rounded-2xl border border-line bg-white px-4 py-3 font-mono text-sm text-ink outline-none focus:border-accent"
-                  />
-                  <button
-                    type="submit"
-                    className="rounded-full border border-line bg-white px-4 py-2 text-sm font-medium text-ink"
-                  >
-                    Record decision
-                  </button>
-                </form>
-              </div>
-            ))}
+      <section id="decision-desk" className="panel p-6">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Decision desk</p>
+            <h3 className="mt-3 font-display text-2xl text-ink">Record final proposal outcomes</h3>
           </div>
-        </article>
+          <Badge>{decisionQueue.length}</Badge>
+        </div>
+
+        <div className="mt-6 grid gap-4 xl:grid-cols-2">
+          {decisionQueue.length > 0 ? (
+            decisionQueue.map((proposal) => (
+              <AdminDecisionDesk
+                key={proposal.id}
+                proposal={proposal}
+                readiness={proposalReadiness.get(proposal.id)!}
+                action={recordDecisionAction}
+              />
+            ))
+          ) : (
+            <p className="rounded-2xl border border-dashed border-line px-4 py-6 text-sm text-ink/60">
+              No proposals are in the decision-ready window right now.
+            </p>
+          )}
+        </div>
       </section>
 
       <section className="panel p-6">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="font-display text-2xl text-ink">Publication archive controls</h3>
             <p className="mt-2 text-sm leading-6 text-ink/70">
-              Internal publications can also be flagged as externally ready so the archive stays
-              prepared for future web and PDF release.
+              Internal publications can be checked for external readiness and export queue progress from the archive desk.
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -254,8 +183,8 @@ export default async function AdminPage() {
           </div>
         </div>
 
-        <div className="mt-5 space-y-3">
-          {publications.map((publication) => (
+        <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {publications.slice(0, 6).map((publication) => (
             <div key={publication.id} className="rounded-2xl border border-line bg-white/60 p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -277,86 +206,6 @@ export default async function AdminPage() {
       </section>
 
       <section className="panel p-6">
-        <h3 className="font-display text-2xl text-ink">Edit issues</h3>
-        <div className="mt-5 space-y-4">
-          {issues.map((issue) => (
-            <form key={issue.id} action={saveIssueAction} className="rounded-2xl border border-line bg-white/60 p-4">
-              <input type="hidden" name="issueId" value={issue.id} />
-              <div className="grid gap-4">
-                <div className="grid gap-4 md:grid-cols-[1.2fr_0.8fr]">
-                  <input
-                    name="title"
-                    defaultValue={issue.title}
-                    className="rounded-2xl border border-line bg-white px-4 py-2 text-sm text-ink outline-none focus:border-accent"
-                  />
-                  <input
-                    name="slug"
-                    defaultValue={issue.slug}
-                    className="rounded-2xl border border-line bg-white px-4 py-2 text-sm text-ink outline-none focus:border-accent"
-                  />
-                </div>
-                <textarea
-                  name="description"
-                  rows={3}
-                  defaultValue={issue.description}
-                  className="w-full rounded-2xl border border-line bg-white px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-                />
-                <div className="grid gap-4 md:grid-cols-3">
-                  <select
-                    name="severity"
-                    defaultValue={String(issue.severity)}
-                    className="rounded-2xl border border-line bg-white px-4 py-2 text-sm text-ink outline-none focus:border-accent"
-                  >
-                    {[1, 2, 3, 4, 5].map((severity) => (
-                      <option key={severity} value={severity}>
-                        Severity {severity}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    name="status"
-                    defaultValue={issue.status}
-                    className="rounded-2xl border border-line bg-white px-4 py-2 text-sm text-ink outline-none focus:border-accent"
-                  >
-                    <option value="OPEN">OPEN</option>
-                    <option value="IN_REVIEW">IN_REVIEW</option>
-                    <option value="RESOLVED">RESOLVED</option>
-                  </select>
-                  <select
-                    name="teamId"
-                    defaultValue={issue.teamId ?? ""}
-                    className="rounded-2xl border border-line bg-white px-4 py-2 text-sm text-ink outline-none focus:border-accent"
-                  >
-                    <option value="">League-wide issue</option>
-                    {teams.map((team) => (
-                      <option key={team.id} value={team.id}>
-                        {team.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <textarea
-                  name="metricsJson"
-                  rows={4}
-                  defaultValue={JSON.stringify(issue.metricsJson ?? {}, null, 2)}
-                  className="w-full rounded-2xl border border-line bg-white px-4 py-3 font-mono text-sm text-ink outline-none focus:border-accent"
-                />
-                <textarea
-                  name="evidenceMd"
-                  rows={4}
-                  defaultValue={issue.evidenceMd ?? ""}
-                  className="w-full rounded-2xl border border-line bg-white px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-                />
-                <button type="submit" className="rounded-full border border-accent bg-accent px-4 py-2 text-sm font-medium text-white">
-                  Save issue
-                </button>
-              </div>
-            </form>
-          ))}
-        </div>
-      </section>
-
-      <section className="panel p-6">
         <div className="flex items-center justify-between gap-3">
           <h3 className="font-display text-2xl text-ink">User roles</h3>
           <Badge>{users.filter((user) => user.role === "ADMIN").length} admin</Badge>
@@ -364,26 +213,7 @@ export default async function AdminPage() {
 
         <div className="mt-5 space-y-4">
           {users.map((user) => (
-            <form key={user.id} action={updateUserRoleAction} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-line bg-white/60 p-4">
-              <input type="hidden" name="userId" value={user.id} />
-              <div>
-                <p className="font-medium text-ink">{user.name}</p>
-                <p className="mt-1 text-sm text-ink/62">{user.email}</p>
-              </div>
-              <div className="flex items-center gap-3">
-                <select
-                  name="role"
-                  defaultValue={user.role}
-                  className="rounded-2xl border border-line bg-white px-4 py-2 text-sm text-ink outline-none focus:border-accent"
-                >
-                  <option value="STUDENT">STUDENT</option>
-                  <option value="ADMIN">ADMIN</option>
-                </select>
-                <button type="submit" className="rounded-full border border-accent bg-accent px-4 py-2 text-sm font-medium text-white">
-                  Apply
-                </button>
-              </div>
-            </form>
+            <AdminRoleCard key={user.id} user={user} action={updateUserRoleAction} />
           ))}
         </div>
       </section>

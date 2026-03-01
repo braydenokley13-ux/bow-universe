@@ -1,11 +1,40 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { ProjectType } from "@prisma/client";
 
+import {
+  ProjectStepBody,
+  ProjectStepContext,
+  ProjectStepLane,
+  ProjectStepLaneSections,
+  ProjectStepMission,
+  ProjectStepOpening,
+  ProjectStepPublish,
+  ProjectStepReview
+} from "@/components/project-coach-steps";
+import { WizardFooter } from "@/components/wizard-footer";
+import { WizardShell } from "@/components/wizard-shell";
+import { WizardStepRail } from "@/components/wizard-step-rail";
 import { getLaneTemplate, projectTypeToPublicationType } from "@/lib/publications";
+import {
+  artifactLinksToText,
+  assessProjectCoach,
+  createInitialLaneSectionStore,
+  createInitialProjectCoachValues,
+  getProjectCoachDomId,
+  getProjectCoachSteps,
+  isProjectCoachStepId,
+  projectCoachStepOrder,
+  referencesToText,
+  syncLaneSectionStore,
+  type ProjectCoachFieldId,
+  type ProjectCoachLaneSectionStore,
+  type ProjectCoachStepId,
+  type ProjectCoachValues
+} from "@/lib/project-wizard";
 import {
   laneTagLabels,
   projectTypeLabels,
@@ -54,213 +83,101 @@ type ProjectStudioFormProps = {
   intentLabel: string;
 };
 
-type ProjectDraftSnapshot = {
-  title: string;
-  abstract: string;
-  essentialQuestion: string;
-  methodsSummary: string;
-  overview: string;
-  evidence: string;
-  analysis: string;
-  recommendations: string;
-  references: string;
-  laneSections: Array<{ key: string; value: string }>;
-};
-
-type DraftCheck = {
-  completeCount: number;
-  totalCount: number;
-  critical: string[];
-  caution: string[];
-};
-
 type AutosaveState = {
   tone: "idle" | "saving" | "saved" | "error";
   message: string;
 };
 
-type StepStatusItem = {
-  label: string;
-  ready: boolean;
-  detail: string;
-};
+function buildProjectFormData(values: ProjectCoachValues, draftId: string) {
+  const formData = new FormData();
 
-const laneOrder: LaneTag[] = [
-  "TOOL_BUILDERS",
-  "POLICY_REFORM_ARCHITECTS",
-  "STRATEGIC_OPERATORS",
-  "ECONOMIC_INVESTIGATORS"
-];
+  if (draftId) {
+    formData.set("projectId", draftId);
+  }
 
-function textReady(value: string) {
-  return value.trim().length >= 12;
+  formData.set("title", values.title);
+  formData.set("summary", values.summary);
+  formData.set("abstract", values.abstract);
+  formData.set("essentialQuestion", values.essentialQuestion);
+  formData.set("methodsSummary", values.methodsSummary);
+  formData.set("projectType", values.projectType);
+  formData.set("lanePrimary", values.lanePrimary);
+  formData.set("teamId", values.teamId);
+  formData.set("supportingProposalId", values.supportingProposalId);
+  formData.set("artifactLinks", values.artifactLinks);
+  formData.set("references", values.references);
+  formData.set("keywords", values.keywords);
+  formData.set("keyTakeaways", values.keyTakeaways);
+  formData.set("publicationSlug", values.publicationSlug);
+  formData.set("findingsMd", values.findingsMd);
+  formData.set("overview", values.overview);
+  formData.set("context", values.context);
+  formData.set("evidence", values.evidence);
+  formData.set("analysis", values.analysis);
+  formData.set("recommendations", values.recommendations);
+  formData.set("reflection", values.reflection);
+  formData.set("laneSectionKeys", values.laneSections.map((section) => section.key).join(","));
+
+  for (const laneTag of values.laneTags) {
+    formData.append("laneTags", laneTag);
+  }
+
+  for (const issueId of values.issueIds) {
+    formData.append("issueIds", issueId);
+  }
+
+  for (const collaboratorId of values.collaboratorIds) {
+    formData.append("collaboratorIds", collaboratorId);
+  }
+
+  for (const section of values.laneSections) {
+    formData.set(`laneSectionTitle_${section.key}`, section.title);
+    formData.set(`laneSectionPrompt_${section.key}`, section.prompt);
+    formData.set(`laneSectionValue_${section.key}`, section.value);
+  }
+
+  return formData;
 }
 
-function readProjectDraft(form: HTMLFormElement): ProjectDraftSnapshot {
-  const formData = new FormData(form);
-  const laneSectionKeys = String(formData.get("laneSectionKeys") ?? "")
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean);
-
-  return {
-    title: String(formData.get("title") ?? ""),
-    abstract: String(formData.get("abstract") ?? ""),
-    essentialQuestion: String(formData.get("essentialQuestion") ?? ""),
-    methodsSummary: String(formData.get("methodsSummary") ?? ""),
-    overview: String(formData.get("overview") ?? ""),
-    evidence: String(formData.get("evidence") ?? ""),
-    analysis: String(formData.get("analysis") ?? ""),
-    recommendations: String(formData.get("recommendations") ?? ""),
-    references: String(formData.get("references") ?? ""),
-    laneSections: laneSectionKeys.map((key) => ({
-      key,
-      value: String(formData.get(`laneSectionValue_${key}`) ?? "")
-    }))
-  };
+function hasAnyDraftContent(values: ProjectCoachValues) {
+  return (
+    values.title.trim().length > 0 ||
+    values.summary.trim().length > 0 ||
+    values.abstract.trim().length > 0 ||
+    values.essentialQuestion.trim().length > 0 ||
+    values.methodsSummary.trim().length > 0 ||
+    values.overview.trim().length > 0 ||
+    values.evidence.trim().length > 0 ||
+    values.analysis.trim().length > 0 ||
+    values.recommendations.trim().length > 0 ||
+    values.references.trim().length > 0 ||
+    values.artifactLinks.trim().length > 0 ||
+    values.laneSections.some((section) => section.value.trim().length > 0)
+  );
 }
 
-function hasAnyDraftContent(snapshot: ProjectDraftSnapshot) {
-  return [
-    snapshot.title,
-    snapshot.abstract,
-    snapshot.essentialQuestion,
-    snapshot.methodsSummary,
-    snapshot.overview,
-    snapshot.evidence,
-    snapshot.analysis,
-    snapshot.recommendations,
-    ...snapshot.laneSections.map((section) => section.value)
-  ].some((value) => value.trim().length > 0);
+function applyStarter(currentValue: string, starter: string, fieldId: string) {
+  if (!currentValue.trim()) {
+    return starter;
+  }
+
+  if (fieldId === "publicationSlug" || fieldId === "keywords") {
+    return currentValue;
+  }
+
+  if (currentValue.includes(starter)) {
+    return currentValue;
+  }
+
+  return `${currentValue.trim()}\n\n${starter}`;
 }
 
-function buildDraftCheck(snapshot: ProjectDraftSnapshot, lane: LaneTag): DraftCheck {
-  const template = getLaneTemplate(lane);
-  const critical: string[] = [];
-  const caution: string[] = [];
-
-  if (!textReady(snapshot.title)) {
-    critical.push("Add a clear title.");
-  }
-  if (!textReady(snapshot.abstract)) {
-    critical.push("Write a short abstract that explains the work.");
-  }
-  if (!textReady(snapshot.essentialQuestion)) {
-    critical.push("State the research question or mission.");
-  }
-  if (!textReady(snapshot.overview)) {
-    critical.push("Strengthen the overview.");
-  }
-  if (!textReady(snapshot.evidence)) {
-    critical.push("Name the evidence or inputs you used.");
-  }
-  if (!textReady(snapshot.analysis)) {
-    critical.push("Explain the main pattern or analysis.");
-  }
-  if (!textReady(snapshot.recommendations)) {
-    critical.push("End with a concrete recommendation.");
-  }
-
-  if (!textReady(snapshot.methodsSummary)) {
-    caution.push("The methods summary still needs more detail.");
-  }
-  if (!textReady(snapshot.references)) {
-    caution.push("Add at least one reference or source link.");
-  }
-  if (snapshot.laneSections.some((section) => !textReady(section.value))) {
-    caution.push(`One or more ${template.outputLabel.toLowerCase()} sections still need more detail.`);
-  }
-
-  const checks = [
-    textReady(snapshot.title),
-    textReady(snapshot.abstract),
-    textReady(snapshot.essentialQuestion),
-    textReady(snapshot.methodsSummary),
-    textReady(snapshot.overview),
-    textReady(snapshot.evidence),
-    textReady(snapshot.analysis),
-    textReady(snapshot.recommendations),
-    textReady(snapshot.references),
-    snapshot.laneSections.every((section) => textReady(section.value))
-  ];
-
-  return {
-    completeCount: checks.filter(Boolean).length,
-    totalCount: checks.length,
-    critical,
-    caution
-  };
+function resolveStep(stepParam: string | null, fallback: ProjectCoachStepId) {
+  return isProjectCoachStepId(stepParam) ? stepParam : fallback;
 }
 
-function buildStepStatusItems(snapshot: ProjectDraftSnapshot, lane: LaneTag) {
-  const template = getLaneTemplate(lane);
-
-  return {
-    foundation: [
-      {
-        label: "Title",
-        ready: textReady(snapshot.title),
-        detail: "A new reader should understand what this publication is about."
-      },
-      {
-        label: "Abstract",
-        ready: textReady(snapshot.abstract),
-        detail: "Summarize the work in two or three calm sentences."
-      },
-      {
-        label: "Question or mission",
-        ready: textReady(snapshot.essentialQuestion),
-        detail: "State the research question or design mission clearly."
-      },
-      {
-        label: "Methods summary",
-        ready: textReady(snapshot.methodsSummary),
-        detail: "Explain how the work was investigated or built."
-      }
-    ] satisfies StepStatusItem[],
-    body: [
-      {
-        label: template.overviewLabel,
-        ready: textReady(snapshot.overview),
-        detail: "Open with the main point so the reader knows where this is going."
-      },
-      {
-        label: "Evidence",
-        ready: textReady(snapshot.evidence),
-        detail: "Name the records, inputs, or observations you used."
-      },
-      {
-        label: "Analysis",
-        ready: textReady(snapshot.analysis),
-        detail: "Explain the pattern, mechanism, or meaning behind the evidence."
-      },
-      {
-        label: "Recommendation",
-        ready: textReady(snapshot.recommendations),
-        detail: "End with a concrete action or next step."
-      },
-      {
-        label: template.outputLabel + " sections",
-        ready:
-          snapshot.laneSections.length > 0 &&
-          snapshot.laneSections.every((section) => textReady(section.value)),
-        detail: "Finish each lane-specific section so the final publication reads cleanly."
-      }
-    ] satisfies StepStatusItem[],
-    publishing: [
-      {
-        label: "References",
-        ready: textReady(snapshot.references),
-        detail: "Add at least one source that supports the publication."
-      }
-    ] satisfies StepStatusItem[]
-  };
-}
-
-function statusTone(ready: boolean) {
-  return ready
-    ? "border-success/30 bg-success/10 text-success"
-    : "border-warn/30 bg-warn/10 text-warn";
+function uniqueLaneTags(values: LaneTag[], lanePrimary: LaneTag) {
+  return Array.from(new Set([...values, lanePrimary])) as LaneTag[];
 }
 
 export function ProjectStudioForm({
@@ -274,76 +191,85 @@ export function ProjectStudioForm({
   intentLabel
 }: ProjectStudioFormProps) {
   const router = useRouter();
-  const formRef = useRef<HTMLFormElement>(null);
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const autosaveTimerRef = useRef<number | null>(null);
-  const [lanePrimary, setLanePrimary] = useState<LaneTag>(
-    initial?.lanePrimary ?? "ECONOMIC_INVESTIGATORS"
-  );
+  const stepSyncRef = useRef(false);
+  const autosaveReadyRef = useRef(false);
+  const currentStepQuery = searchParams.get("step");
   const [draftId, setDraftId] = useState(initial?.id ?? "");
-  const [draftSnapshot, setDraftSnapshot] = useState<ProjectDraftSnapshot>({
-    title: initial?.title ?? "",
-    abstract: initial?.abstract ?? "",
-    essentialQuestion: initial?.essentialQuestion ?? "",
-    methodsSummary: initial?.methodsSummary ?? "",
-    overview: initial?.overview ?? "",
-    evidence: initial?.evidence ?? "",
-    analysis: initial?.analysis ?? "",
-    recommendations: initial?.recommendations ?? "",
-    references:
-      initial?.references
-        .map((reference) =>
-          [reference.label, reference.url, reference.sourceType, reference.note ?? ""]
-            .filter(Boolean)
-            .join(" | ")
-        )
-        .join("\n") ?? "",
-    laneSections: initial?.laneSections.map((section) => ({
-      key: section.key,
-      value: section.value
-    })) ?? []
-  });
+  const [laneSectionStore, setLaneSectionStore] = useState<ProjectCoachLaneSectionStore>(() =>
+    createInitialLaneSectionStore(
+      initial?.lanePrimary ?? "ECONOMIC_INVESTIGATORS",
+      initial?.laneSections
+    )
+  );
+  const [values, setValues] = useState<ProjectCoachValues>(() =>
+    createInitialProjectCoachValues({
+      lanePrimary: initial?.lanePrimary ?? "ECONOMIC_INVESTIGATORS",
+      projectType:
+        initial?.projectType ??
+        (initial?.lanePrimary === "TOOL_BUILDERS"
+          ? ProjectType.TOOL
+          : initial?.lanePrimary === "STRATEGIC_OPERATORS"
+            ? ProjectType.STRATEGY
+            : initial?.lanePrimary === "POLICY_REFORM_ARCHITECTS"
+              ? ProjectType.PROPOSAL_SUPPORT
+              : ProjectType.INVESTIGATION),
+      laneTags:
+        initial?.laneTags && initial.laneTags.length > 0
+          ? uniqueLaneTags(initial.laneTags, initial.lanePrimary)
+          : [initial?.lanePrimary ?? "ECONOMIC_INVESTIGATORS"],
+      issueIds: initial?.issueIds ?? [],
+      teamId: initial?.teamId ?? "",
+      supportingProposalId: initial?.supportingProposalId ?? "",
+      collaboratorIds: initial?.collaboratorIds ?? [],
+      title: initial?.title ?? "",
+      summary: initial?.summary ?? "",
+      abstract: initial?.abstract ?? "",
+      essentialQuestion: initial?.essentialQuestion ?? "",
+      methodsSummary: initial?.methodsSummary ?? "",
+      publicationSlug: initial?.publicationSlug ?? "",
+      findingsMd: initial?.findingsMd ?? "",
+      overview: initial?.overview ?? "",
+      context: initial?.context ?? "",
+      evidence: initial?.evidence ?? "",
+      analysis: initial?.analysis ?? "",
+      recommendations: initial?.recommendations ?? "",
+      reflection: initial?.reflection ?? "",
+      artifactLinks: artifactLinksToText(initial?.artifactLinks ?? []),
+      references: referencesToText(initial?.references ?? []),
+      keywords: initial?.keywords.join(", ") ?? "",
+      keyTakeaways: initial?.keyTakeaways.join("\n") ?? "",
+      laneSections:
+        createInitialLaneSectionStore(
+          initial?.lanePrimary ?? "ECONOMIC_INVESTIGATORS",
+          initial?.laneSections
+        )[initial?.lanePrimary ?? "ECONOMIC_INVESTIGATORS"]
+    })
+  );
   const [autosaveState, setAutosaveState] = useState<AutosaveState>({
     tone: "idle",
     message: initial?.id ? "Draft loaded." : "Autosave starts after you begin writing."
   });
-  const [draftCheck, setDraftCheck] = useState<DraftCheck>({
-    completeCount: 0,
-    totalCount: 10,
-    critical: [],
-    caution: []
-  });
+  const [carryForwardWarnings, setCarryForwardWarnings] = useState<string[]>([]);
 
-  const template = getLaneTemplate(lanePrimary);
-  const currentProjectType =
-    initial?.projectType ??
-    (lanePrimary === "TOOL_BUILDERS"
-      ? ProjectType.TOOL
-      : lanePrimary === "STRATEGIC_OPERATORS"
-        ? ProjectType.STRATEGY
-        : lanePrimary === "POLICY_REFORM_ARCHITECTS"
-          ? ProjectType.PROPOSAL_SUPPORT
-          : ProjectType.INVESTIGATION);
+  const steps = getProjectCoachSteps(values.lanePrimary);
+  const laneTemplate = getLaneTemplate(values.lanePrimary);
+  const assessment = assessProjectCoach(values);
+  const [currentStepId, setCurrentStepId] = useState<ProjectCoachStepId>(() =>
+    resolveStep(currentStepQuery, assessment.firstIncompleteStepId)
+  );
 
-  const laneSections = template.laneSections.map((section) => {
-    const existing = initial?.laneSections.find((entry) => entry.key === section.key);
-
-    return {
-      key: section.key,
-      title: existing?.title ?? section.title,
-      prompt: existing?.prompt ?? section.prompt,
-      value: existing?.value ?? ""
-    };
-  });
-
-  useEffect(() => {
-    if (!formRef.current) {
-      return;
-    }
-
-    const snapshot = readProjectDraft(formRef.current);
-    setDraftSnapshot(snapshot);
-    setDraftCheck(buildDraftCheck(snapshot, lanePrimary));
-  }, [lanePrimary]);
+  const currentStepIndex = projectCoachStepOrder.indexOf(currentStepId);
+  const currentStep = steps[currentStepId];
+  const currentStepEvaluation = assessment.steps[currentStepId];
+  const currentOutputLabel =
+    publicationTypeLabels[projectTypeToPublicationType(values.projectType, values.lanePrimary)];
+  const completedSteps = projectCoachStepOrder.filter((stepId) => {
+    const status = assessment.steps[stepId].status;
+    return status === "strong" || status === "done";
+  }).length;
 
   useEffect(() => {
     return () => {
@@ -353,24 +279,31 @@ export function ProjectStudioForm({
     };
   }, []);
 
-  async function runAutosave() {
-    const form = formRef.current;
-    if (!form) {
+  useEffect(() => {
+    if (!stepSyncRef.current) {
+      stepSyncRef.current = true;
+      setCurrentStepId(resolveStep(currentStepQuery, assessment.firstIncompleteStepId));
       return;
     }
 
-    const snapshot = readProjectDraft(form);
-    setDraftSnapshot(snapshot);
-    const check = buildDraftCheck(snapshot, lanePrimary);
-    setDraftCheck(check);
+    if (isProjectCoachStepId(currentStepQuery) && currentStepQuery !== currentStepId) {
+      setCurrentStepId(currentStepQuery);
+    }
+  }, [assessment.firstIncompleteStepId, currentStepId, currentStepQuery]);
 
-    if (!hasAnyDraftContent(snapshot) && !draftId) {
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (params.get("step") === currentStepId) {
       return;
     }
 
-    const payload = new FormData(form);
-    if (draftId) {
-      payload.set("projectId", draftId);
+    params.set("step", currentStepId);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  }, [currentStepId, pathname, router, searchParams]);
+
+  const performAutosave = useCallback(async () => {
+    if (!hasAnyDraftContent(values) && !draftId) {
+      return;
     }
 
     setAutosaveState({
@@ -381,7 +314,7 @@ export function ProjectStudioForm({
     try {
       const response = await fetch("/api/studio/project-autosave", {
         method: "POST",
-        body: payload
+        body: buildProjectFormData(values, draftId)
       });
       const result = await response.json();
 
@@ -406,515 +339,450 @@ export function ProjectStudioForm({
         message: error instanceof Error ? error.message : "Autosave failed."
       });
     }
-  }
+  }, [draftId, initial?.id, router, values]);
 
-  function scheduleAutosave() {
-    if (!formRef.current) {
+  useEffect(() => {
+    if (!autosaveReadyRef.current) {
+      autosaveReadyRef.current = true;
       return;
     }
-
-    const snapshot = readProjectDraft(formRef.current);
-    setDraftSnapshot(snapshot);
-    setDraftCheck(buildDraftCheck(snapshot, lanePrimary));
 
     if (autosaveTimerRef.current) {
       window.clearTimeout(autosaveTimerRef.current);
     }
 
     autosaveTimerRef.current = window.setTimeout(() => {
-      void runAutosave();
+      void performAutosave();
     }, 900);
+  }, [performAutosave]);
+
+  async function handleManualDraftSave() {
+    if (autosaveTimerRef.current) {
+      window.clearTimeout(autosaveTimerRef.current);
+    }
+
+    await performAutosave();
   }
 
-  const stepStatus = buildStepStatusItems(draftSnapshot, lanePrimary);
+  function updateField(fieldId: Exclude<ProjectCoachFieldId, "laneSections">, value: string) {
+    setValues((current) => ({
+      ...current,
+      [fieldId]: value
+    }));
+  }
+
+  function insertStarter(fieldId: string, starter: string) {
+    if (fieldId.startsWith("laneSection:")) {
+      const key = fieldId.replace("laneSection:", "");
+      updateLaneSection(key, applyStarter(values.laneSections.find((section) => section.key === key)?.value ?? "", starter, fieldId));
+      return;
+    }
+
+    setValues((current) => ({
+      ...current,
+      [fieldId]: applyStarter(current[fieldId as Exclude<ProjectCoachFieldId, "laneSections">] as string, starter, fieldId)
+    }));
+  }
+
+  function updateLaneSection(key: string, value: string) {
+    setLaneSectionStore((currentStore) => {
+      const nextStore = syncLaneSectionStore(currentStore, values.lanePrimary);
+      const nextLaneSections = nextStore[values.lanePrimary].map((section) =>
+        section.key === key ? { ...section, value } : section
+      );
+      const updatedStore = {
+        ...nextStore,
+        [values.lanePrimary]: nextLaneSections
+      };
+
+      setValues((currentValues) => ({
+        ...currentValues,
+        laneSections: nextLaneSections
+      }));
+
+      return updatedStore;
+    });
+  }
+
+  function changeLane(nextLane: LaneTag) {
+    setLaneSectionStore((currentStore) => {
+      const nextStore = syncLaneSectionStore(currentStore, nextLane);
+      setValues((currentValues) => ({
+        ...currentValues,
+        lanePrimary: nextLane,
+        laneTags: uniqueLaneTags(currentValues.laneTags, nextLane),
+        laneSections: nextStore[nextLane]
+      }));
+      return nextStore;
+    });
+  }
+
+  function changeProjectType(projectType: ProjectType) {
+    setValues((current) => ({
+      ...current,
+      projectType
+    }));
+  }
+
+  function toggleLaneTag(lane: LaneTag) {
+    setValues((current) => {
+      const alreadySelected = current.laneTags.includes(lane);
+      if (lane === current.lanePrimary && alreadySelected) {
+        return current;
+      }
+
+      return {
+        ...current,
+        laneTags: alreadySelected
+          ? current.laneTags.filter((entry) => entry !== lane)
+          : [...current.laneTags, lane]
+      };
+    });
+  }
+
+  function toggleArrayValue<K extends "issueIds" | "collaboratorIds">(fieldId: K, value: string) {
+    setValues((current) => {
+      const nextValues = current[fieldId].includes(value)
+        ? current[fieldId].filter((entry) => entry !== value)
+        : [...current[fieldId], value];
+
+      return {
+        ...current,
+        [fieldId]: nextValues
+      };
+    });
+  }
+
+  function focusFirstWeakField(stepId: ProjectCoachStepId) {
+    const stepDefinition = steps[stepId];
+    const targetField =
+      stepDefinition.fieldIds.find((fieldId) => !assessment.fields[fieldId].complete) ??
+      stepDefinition.fieldIds[0];
+
+    if (targetField === "laneSections") {
+      const firstIncompleteSection = assessment.laneSectionEvaluations.find((section) => !section.complete);
+      const element = document.getElementById(
+        firstIncompleteSection
+          ? `project-field-laneSection-${firstIncompleteSection.key}`
+          : `project-field-laneSection-${values.laneSections[0]?.key ?? ""}`
+      );
+      element?.focus();
+      return;
+    }
+
+    const element = document.getElementById(getProjectCoachDomId(targetField));
+    element?.focus();
+  }
+
+  function moveToStep(nextStepId: ProjectCoachStepId, withWarnings: boolean) {
+    setCarryForwardWarnings(withWarnings ? currentStepEvaluation.missingItems : []);
+    setCurrentStepId(nextStepId);
+    window.setTimeout(() => {
+      focusFirstWeakField(nextStepId);
+    }, 30);
+  }
+
+  function goBack() {
+    if (currentStepIndex <= 0) {
+      return;
+    }
+
+    setCarryForwardWarnings([]);
+    setCurrentStepId(projectCoachStepOrder[currentStepIndex - 1]);
+  }
+
+  function goNext() {
+    const nextStepId = projectCoachStepOrder[currentStepIndex + 1];
+    if (!nextStepId) {
+      return;
+    }
+
+    moveToStep(nextStepId, currentStepEvaluation.missingItems.length > 0);
+  }
+
+  function selectFromRail(stepId: ProjectCoachStepId) {
+    const targetIndex = projectCoachStepOrder.indexOf(stepId);
+    if (targetIndex > currentStepIndex && !assessment.steps[stepId].complete) {
+      return;
+    }
+
+    setCarryForwardWarnings([]);
+    setCurrentStepId(stepId);
+  }
+
+  function renderHiddenFields() {
+    return (
+      <>
+        <input type="hidden" name="projectId" value={draftId} readOnly />
+        <input type="hidden" name="title" value={values.title} readOnly />
+        <input type="hidden" name="summary" value={values.summary} readOnly />
+        <input type="hidden" name="abstract" value={values.abstract} readOnly />
+        <input type="hidden" name="essentialQuestion" value={values.essentialQuestion} readOnly />
+        <input type="hidden" name="methodsSummary" value={values.methodsSummary} readOnly />
+        <input type="hidden" name="projectType" value={values.projectType} readOnly />
+        <input type="hidden" name="lanePrimary" value={values.lanePrimary} readOnly />
+        <input type="hidden" name="teamId" value={values.teamId} readOnly />
+        <input type="hidden" name="supportingProposalId" value={values.supportingProposalId} readOnly />
+        <input type="hidden" name="artifactLinks" value={values.artifactLinks} readOnly />
+        <input type="hidden" name="references" value={values.references} readOnly />
+        <input type="hidden" name="keywords" value={values.keywords} readOnly />
+        <input type="hidden" name="keyTakeaways" value={values.keyTakeaways} readOnly />
+        <input type="hidden" name="publicationSlug" value={values.publicationSlug} readOnly />
+        <input type="hidden" name="findingsMd" value={values.findingsMd} readOnly />
+        <input type="hidden" name="overview" value={values.overview} readOnly />
+        <input type="hidden" name="context" value={values.context} readOnly />
+        <input type="hidden" name="evidence" value={values.evidence} readOnly />
+        <input type="hidden" name="analysis" value={values.analysis} readOnly />
+        <input type="hidden" name="recommendations" value={values.recommendations} readOnly />
+        <input type="hidden" name="reflection" value={values.reflection} readOnly />
+        <input
+          type="hidden"
+          name="laneSectionKeys"
+          value={values.laneSections.map((section) => section.key).join(",")}
+          readOnly
+        />
+
+        {values.laneTags.map((laneTag) => (
+          <input key={laneTag} type="hidden" name="laneTags" value={laneTag} readOnly />
+        ))}
+        {values.issueIds.map((issueId) => (
+          <input key={issueId} type="hidden" name="issueIds" value={issueId} readOnly />
+        ))}
+        {values.collaboratorIds.map((collaboratorId) => (
+          <input key={collaboratorId} type="hidden" name="collaboratorIds" value={collaboratorId} readOnly />
+        ))}
+        {values.laneSections.map((section) => (
+          <div key={section.key}>
+            <input type="hidden" name={`laneSectionTitle_${section.key}`} value={section.title} readOnly />
+            <input type="hidden" name={`laneSectionPrompt_${section.key}`} value={section.prompt} readOnly />
+            <input type="hidden" name={`laneSectionValue_${section.key}`} value={section.value} readOnly />
+          </div>
+        ))}
+      </>
+    );
+  }
+
+  const railItems = projectCoachStepOrder.map((stepId, index) => ({
+    id: stepId,
+    title: steps[stepId].title,
+    shortTitle: steps[stepId].shortTitle,
+    status: assessment.steps[stepId].status,
+    current: currentStepId === stepId,
+    disabled: index > currentStepIndex && !assessment.steps[stepId].complete
+  }));
+
+  function renderCurrentStep() {
+    switch (currentStepId) {
+      case "lane":
+        return (
+          <ProjectStepLane
+            step={currentStep}
+            evaluation={currentStepEvaluation}
+            warningItems={carryForwardWarnings}
+            laneEvaluation={assessment.fields.lanePrimary}
+            projectTypeEvaluation={assessment.fields.projectType}
+            laneTagsEvaluation={assessment.fields.laneTags}
+            lanePrimary={values.lanePrimary}
+            projectType={values.projectType}
+            laneTags={values.laneTags}
+            currentOutputLabel={currentOutputLabel}
+            onChangeLane={changeLane}
+            onChangeProjectType={changeProjectType}
+            onToggleLaneTag={toggleLaneTag}
+          />
+        );
+      case "context":
+        return (
+          <ProjectStepContext
+            step={currentStep}
+            evaluation={currentStepEvaluation}
+            warningItems={carryForwardWarnings}
+            issueEvaluation={assessment.fields.issueIds}
+            teamEvaluation={assessment.fields.teamId}
+            proposalEvaluation={assessment.fields.supportingProposalId}
+            collaboratorEvaluation={assessment.fields.collaboratorIds}
+            issues={issues}
+            teams={teams}
+            proposals={proposals}
+            users={users}
+            viewerId={viewerId}
+            issueIds={values.issueIds}
+            teamId={values.teamId}
+            supportingProposalId={values.supportingProposalId}
+            collaboratorIds={values.collaboratorIds}
+            onToggleIssue={(value) => toggleArrayValue("issueIds", value)}
+            onChangeTeam={(value) => updateField("teamId", value)}
+            onChangeSupportingProposal={(value) => updateField("supportingProposalId", value)}
+            onToggleCollaborator={(value) => toggleArrayValue("collaboratorIds", value)}
+          />
+        );
+      case "opening":
+        return (
+          <ProjectStepOpening
+            step={currentStep}
+            evaluation={currentStepEvaluation}
+            warningItems={carryForwardWarnings}
+            titleEvaluation={assessment.fields.title}
+            summaryEvaluation={assessment.fields.summary}
+            abstractEvaluation={assessment.fields.abstract}
+            title={values.title}
+            summary={values.summary}
+            abstract={values.abstract}
+            onChangeTitle={(value) => updateField("title", value)}
+            onChangeSummary={(value) => updateField("summary", value)}
+            onChangeAbstract={(value) => updateField("abstract", value)}
+            onUseTitleStarter={(starter) => insertStarter("title", starter)}
+            onUseSummaryStarter={(starter) => insertStarter("summary", starter)}
+            onUseAbstractStarter={(starter) => insertStarter("abstract", starter)}
+          />
+        );
+      case "mission":
+        return (
+          <ProjectStepMission
+            step={currentStep}
+            evaluation={currentStepEvaluation}
+            warningItems={carryForwardWarnings}
+            questionEvaluation={assessment.fields.essentialQuestion}
+            methodsEvaluation={assessment.fields.methodsSummary}
+            essentialQuestion={values.essentialQuestion}
+            methodsSummary={values.methodsSummary}
+            onChangeQuestion={(value) => updateField("essentialQuestion", value)}
+            onChangeMethods={(value) => updateField("methodsSummary", value)}
+            onUseQuestionStarter={(starter) => insertStarter("essentialQuestion", starter)}
+            onUseMethodsStarter={(starter) => insertStarter("methodsSummary", starter)}
+          />
+        );
+      case "body":
+        return (
+          <ProjectStepBody
+            step={currentStep}
+            evaluation={currentStepEvaluation}
+            warningItems={carryForwardWarnings}
+            overviewEvaluation={assessment.fields.overview}
+            contextEvaluation={assessment.fields.context}
+            evidenceEvaluation={assessment.fields.evidence}
+            analysisEvaluation={assessment.fields.analysis}
+            recommendationEvaluation={assessment.fields.recommendations}
+            overviewLabel={laneTemplate.overviewLabel}
+            overview={values.overview}
+            context={values.context}
+            evidence={values.evidence}
+            analysis={values.analysis}
+            recommendations={values.recommendations}
+            onChangeOverview={(value) => updateField("overview", value)}
+            onChangeContext={(value) => updateField("context", value)}
+            onChangeEvidence={(value) => updateField("evidence", value)}
+            onChangeAnalysis={(value) => updateField("analysis", value)}
+            onChangeRecommendations={(value) => updateField("recommendations", value)}
+            onUseOverviewStarter={(starter) => insertStarter("overview", starter)}
+            onUseContextStarter={(starter) => insertStarter("context", starter)}
+            onUseEvidenceStarter={(starter) => insertStarter("evidence", starter)}
+            onUseAnalysisStarter={(starter) => insertStarter("analysis", starter)}
+            onUseRecommendationStarter={(starter) => insertStarter("recommendations", starter)}
+          />
+        );
+      case "laneSections":
+        return (
+          <ProjectStepLaneSections
+            step={currentStep}
+            evaluation={currentStepEvaluation}
+            warningItems={carryForwardWarnings}
+            laneSectionsEvaluation={assessment.fields.laneSections}
+            sectionEvaluations={assessment.laneSectionEvaluations}
+            laneSections={values.laneSections}
+            outputLabel={laneTemplate.outputLabel}
+            onChangeSection={updateLaneSection}
+            onUseSectionStarter={(key, starter) => insertStarter(`laneSection:${key}`, starter)}
+          />
+        );
+      case "publish":
+        return (
+          <ProjectStepPublish
+            step={currentStep}
+            evaluation={currentStepEvaluation}
+            warningItems={carryForwardWarnings}
+            artifactEvaluation={assessment.fields.artifactLinks}
+            referencesEvaluation={assessment.fields.references}
+            keywordsEvaluation={assessment.fields.keywords}
+            takeawaysEvaluation={assessment.fields.keyTakeaways}
+            slugEvaluation={assessment.fields.publicationSlug}
+            reflectionEvaluation={assessment.fields.reflection}
+            artifactLinks={values.artifactLinks}
+            references={values.references}
+            keywords={values.keywords}
+            keyTakeaways={values.keyTakeaways}
+            publicationSlug={values.publicationSlug}
+            reflection={values.reflection}
+            onChangeArtifactLinks={(value) => updateField("artifactLinks", value)}
+            onChangeReferences={(value) => updateField("references", value)}
+            onChangeKeywords={(value) => updateField("keywords", value)}
+            onChangeTakeaways={(value) => updateField("keyTakeaways", value)}
+            onChangeSlug={(value) => updateField("publicationSlug", value)}
+            onChangeReflection={(value) => updateField("reflection", value)}
+            onUseArtifactStarter={(starter) => insertStarter("artifactLinks", starter)}
+            onUseReferencesStarter={(starter) => insertStarter("references", starter)}
+            onUseKeywordsStarter={(starter) => insertStarter("keywords", starter)}
+            onUseTakeawayStarter={(starter) => insertStarter("keyTakeaways", starter)}
+            onUseSlugStarter={(starter) => insertStarter("publicationSlug", starter)}
+            onUseReflectionStarter={(starter) => insertStarter("reflection", starter)}
+          />
+        );
+      case "review":
+        return (
+          <ProjectStepReview
+            step={currentStep}
+            evaluation={currentStepEvaluation}
+            warningItems={carryForwardWarnings}
+            findingsEvaluation={assessment.fields.findingsMd}
+            findingsMd={values.findingsMd}
+            blockers={assessment.reviewBuckets.blockers}
+            polish={assessment.reviewBuckets.polish}
+            strengths={assessment.reviewBuckets.strengths}
+            laneTemplate={laneTemplate}
+            onChangeFindings={(value) => updateField("findingsMd", value)}
+          />
+        );
+    }
+  }
 
   return (
     <form
-      ref={formRef}
       action={action}
       className="space-y-6"
-      onInput={scheduleAutosave}
-      onChange={scheduleAutosave}
+      onSubmit={(event) => {
+        if (currentStepId !== "review" || !assessment.submitReady) {
+          event.preventDefault();
+        }
+      }}
     >
-      <input type="hidden" name="projectId" value={draftId} readOnly />
+      {renderHiddenFields()}
 
-      <section className="panel p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="font-mono text-xs uppercase tracking-[0.22em] text-accent">Studio progress</p>
-            <h3 className="mt-3 font-display text-2xl text-ink">Live draft check</h3>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-ink/68">
-              This panel updates while you type. It shows what is already strong, what still needs
-              work, and whether the draft is saving in the background.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-line bg-white/70 px-4 py-3 text-sm text-ink/70">
-            {draftCheck.completeCount} of {draftCheck.totalCount} core parts in place
-          </div>
-        </div>
-
-        <div className="mt-5 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-          <div className="rounded-2xl border border-line bg-white/60 p-4">
-            <p className="font-medium text-ink">Autosave</p>
-            <p
-              className={`mt-3 text-sm ${
-                autosaveState.tone === "error"
-                  ? "text-danger"
-                  : autosaveState.tone === "saved"
-                    ? "text-success"
-                    : "text-ink/68"
-              }`}
-            >
-              {autosaveState.message}
-            </p>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-2xl border border-line bg-white/60 p-4">
-              <p className="font-medium text-ink">Still missing</p>
-              <ul className="mt-3 space-y-2 text-sm leading-6 text-ink/68">
-                {draftCheck.critical.length > 0 ? (
-                  draftCheck.critical.map((line) => (
-                    <li key={line} className="rounded-2xl border border-line bg-white/70 px-4 py-3">
-                      {line}
-                    </li>
-                  ))
-                ) : (
-                  <li className="rounded-2xl border border-line bg-white/70 px-4 py-3">
-                    Core sections look complete.
-                  </li>
-                )}
-              </ul>
-            </div>
-            <div className="rounded-2xl border border-line bg-white/60 p-4">
-              <p className="font-medium text-ink">Needs smoothing</p>
-              <ul className="mt-3 space-y-2 text-sm leading-6 text-ink/68">
-                {draftCheck.caution.length > 0 ? (
-                  draftCheck.caution.map((line) => (
-                    <li key={line} className="rounded-2xl border border-line bg-white/70 px-4 py-3">
-                      {line}
-                    </li>
-                  ))
-                ) : (
-                  <li className="rounded-2xl border border-line bg-white/70 px-4 py-3">
-                    No extra cautions right now.
-                  </li>
-                )}
-              </ul>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="panel p-6">
-        <p className="font-mono text-xs uppercase tracking-[0.22em] text-accent">Step 1</p>
-        <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h3 className="font-display text-2xl text-ink">Choose the lane and output format</h3>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-ink/68">
-              Start by choosing the kind of research you are making. The lane changes the
-              final publication format and the writing prompts below.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-line bg-white/70 px-4 py-3 text-sm text-ink/70">
-            Final output:{" "}
-            <span className="font-medium text-ink">
-              {publicationTypeLabels[projectTypeToPublicationType(currentProjectType, lanePrimary)]}
-            </span>
-          </div>
-        </div>
-
-        <div className="mt-5 grid gap-4 lg:grid-cols-2">
-          <select
-            name="lanePrimary"
-            value={lanePrimary}
-            onChange={(event) => setLanePrimary(event.target.value as LaneTag)}
-            className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-          >
-            {laneOrder.map((lane) => (
-              <option key={lane} value={lane}>
-                {laneTagLabels[lane]}
-              </option>
-            ))}
-          </select>
-          <select
-            name="projectType"
-            defaultValue={initial?.projectType ?? currentProjectType}
-            className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-          >
-            {Object.entries(projectTypeLabels).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="mt-4 grid gap-3 lg:grid-cols-2">
-          {laneOrder.map((lane) => (
-            <label
-              key={lane}
-              className="flex items-start gap-3 rounded-2xl border border-line bg-white/60 px-4 py-4 text-sm text-ink/72"
-            >
-              <input
-                type="checkbox"
-                name="laneTags"
-                value={lane}
-                defaultChecked={initial?.laneTags.includes(lane) ?? lane === lanePrimary}
-                className="mt-1 rounded"
-              />
-              <span>
-                <span className="block font-medium text-ink">{laneTagLabels[lane]}</span>
-                <span className="mt-1 block leading-6 text-ink/62">
-                  {getLaneTemplate(lane).outputLabel}
-                </span>
-              </span>
-            </label>
-          ))}
-        </div>
-      </section>
-
-      <section className="panel p-6">
-        <p className="font-mono text-xs uppercase tracking-[0.22em] text-accent">Step 2</p>
-        <h3 className="mt-3 font-display text-2xl text-ink">Choose the league context</h3>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-ink/68">
-          Decide which issue, team, or proposal your work is speaking to so a reader can
-          place your research inside the BOW Universe.
-        </p>
-
-        <div className="mt-5 grid gap-4 lg:grid-cols-2">
-          <div className="rounded-2xl border border-line bg-white/60 p-4">
-            <p className="font-medium text-ink">Linked issues</p>
-            <div className="mt-3 max-h-56 space-y-2 overflow-auto">
-              {issues.map((issue) => (
-                <label key={issue.id} className="flex items-center gap-2 text-sm text-ink/72">
-                  <input
-                    type="checkbox"
-                    name="issueIds"
-                    value={issue.id}
-                    defaultChecked={initial?.issueIds.includes(issue.id)}
-                    className="rounded"
-                  />
-                  {issue.title} (severity {issue.severity})
-                </label>
-              ))}
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <select
-              name="teamId"
-              defaultValue={initial?.teamId ?? ""}
-              className="w-full rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-            >
-              <option value="">No linked team</option>
-              {teams.map((team) => (
-                <option key={team.id} value={team.id}>
-                  {team.name}
-                </option>
-              ))}
-            </select>
-
-            <select
-              name="supportingProposalId"
-              defaultValue={initial?.supportingProposalId ?? ""}
-              className="w-full rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-            >
-              <option value="">No supporting proposal</option>
-              {proposals.map((proposal) => (
-                <option key={proposal.id} value={proposal.id}>
-                  {proposal.title} · {proposal.issue.title}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </section>
-
-      <section className="panel p-6">
-        <p className="font-mono text-xs uppercase tracking-[0.22em] text-accent">Step 3</p>
-        <h3 className="mt-3 font-display text-2xl text-ink">Write the publication foundation</h3>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-ink/68">
-          These fields become the opening layer of the finished publication. Keep them calm,
-          clear, and specific enough that a new reader can follow your idea quickly.
-        </p>
-
-        <div className="mt-5 grid gap-4">
-          <input
-            name="title"
-            defaultValue={initial?.title ?? ""}
-            placeholder="Title"
-            className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
+      <WizardShell
+        progressTitle="Adaptive project coach"
+        progressDescription={`This coach now works across all four lanes. It changes the guidance, section prompts, and final review standards to match the kind of publication you are building in ${laneTagLabels[values.lanePrimary]}.`}
+        autosaveMessage={autosaveState.message}
+        autosaveTone={autosaveState.tone}
+        completedSteps={completedSteps}
+        totalSteps={projectCoachStepOrder.length}
+        rail={<WizardStepRail items={railItems} onSelect={selectFromRail} />}
+        footer={
+          <WizardFooter
+            currentStepNumber={currentStepIndex + 1}
+            totalSteps={projectCoachStepOrder.length}
+            nextMove={currentStepEvaluation.nextMove}
+            canGoBack={currentStepIndex > 0}
+            canGoNext={currentStepIndex < projectCoachStepOrder.length - 1}
+            onSaveDraft={handleManualDraftSave}
+            onBack={goBack}
+            onNext={goNext}
+            submitReady={assessment.submitReady}
+            reviewMode={currentStepId === "review"}
+            submitLabel={intentLabel}
           />
-          <textarea
-            name="summary"
-            defaultValue={initial?.summary ?? ""}
-            rows={3}
-            placeholder="Short summary"
-            className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-          />
-          <textarea
-            name="abstract"
-            defaultValue={initial?.abstract ?? ""}
-            rows={4}
-            placeholder="Abstract: explain what this project studies, what evidence it uses, and what it finds."
-            className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-          />
-          <input
-            name="essentialQuestion"
-            defaultValue={initial?.essentialQuestion ?? ""}
-            placeholder="Research question or mission"
-            className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-          />
-          <textarea
-            name="methodsSummary"
-            defaultValue={initial?.methodsSummary ?? ""}
-            rows={3}
-            placeholder="Methods summary: how did you investigate or build this?"
-            className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-          />
-          <input
-            name="publicationSlug"
-            defaultValue={initial?.publicationSlug ?? ""}
-            placeholder="Optional publication slug"
-            className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-          />
-        </div>
-
-        <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {stepStatus.foundation.map((item) => (
-            <div key={item.label} className="rounded-2xl border border-line bg-white/55 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <p className="font-medium text-ink">{item.label}</p>
-                <span className={`rounded-full border px-3 py-1 font-mono text-[11px] uppercase tracking-[0.2em] ${statusTone(item.ready)}`}>
-                  {item.ready ? "Ready" : "Keep writing"}
-                </span>
-              </div>
-              <p className="mt-3 text-sm leading-6 text-ink/66">{item.detail}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="panel p-6">
-        <p className="font-mono text-xs uppercase tracking-[0.22em] text-accent">Step 4</p>
-        <h3 className="mt-3 font-display text-2xl text-ink">Build the research body</h3>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-ink/68">
-          This section becomes the main body of the final brief. Each part has a job. Write
-          what the reader needs to understand, not just what you did.
-        </p>
-
-        <div className="mt-5 grid gap-4">
-          <textarea
-            name="overview"
-            defaultValue={initial?.overview ?? ""}
-            rows={4}
-            placeholder={template.examples[0]?.body ?? "Overview"}
-            className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-          />
-          <textarea
-            name="context"
-            defaultValue={initial?.context ?? ""}
-            rows={4}
-            placeholder="Context: what should a reader know before they read your findings?"
-            className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-          />
-          <textarea
-            name="evidence"
-            defaultValue={initial?.evidence ?? ""}
-            rows={5}
-            placeholder="Evidence: what records, observations, or source material did you use?"
-            className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-          />
-          <textarea
-            name="analysis"
-            defaultValue={initial?.analysis ?? ""}
-            rows={5}
-            placeholder="Analysis: what patterns or ideas matter most?"
-            className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-          />
-          <textarea
-            name="recommendations"
-            defaultValue={initial?.recommendations ?? ""}
-            rows={5}
-            placeholder="Recommendation: what should happen next because of your work?"
-            className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-          />
-        </div>
-
-        <input type="hidden" name="laneSectionKeys" value={laneSections.map((section) => section.key).join(",")} />
-
-        <div className="mt-6 grid gap-4 lg:grid-cols-2">
-          {laneSections.map((section) => (
-            <div key={section.key} className="rounded-2xl border border-line bg-white/55 p-4">
-              <input type="hidden" name={`laneSectionTitle_${section.key}`} value={section.title} />
-              <input type="hidden" name={`laneSectionPrompt_${section.key}`} value={section.prompt} />
-              <p className="font-medium text-ink">{section.title}</p>
-              <p className="mt-2 text-sm leading-6 text-ink/64">{section.prompt}</p>
-              <textarea
-                name={`laneSectionValue_${section.key}`}
-                defaultValue={section.value}
-                rows={5}
-                className="mt-3 w-full rounded-2xl border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-              />
-            </div>
-          ))}
-        </div>
-
-        <textarea
-          name="reflection"
-          defaultValue={initial?.reflection ?? ""}
-          rows={4}
-          placeholder="Reflection: what still feels uncertain, and what would improve the work next?"
-          className="mt-4 w-full rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-        />
-
-        <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {stepStatus.body.map((item) => (
-            <div key={item.label} className="rounded-2xl border border-line bg-white/55 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <p className="font-medium text-ink">{item.label}</p>
-                <span className={`rounded-full border px-3 py-1 font-mono text-[11px] uppercase tracking-[0.2em] ${statusTone(item.ready)}`}>
-                  {item.ready ? "Ready" : "Needs work"}
-                </span>
-              </div>
-              <p className="mt-3 text-sm leading-6 text-ink/66">{item.detail}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="panel p-6">
-        <p className="font-mono text-xs uppercase tracking-[0.22em] text-accent">Step 5</p>
-        <h3 className="mt-3 font-display text-2xl text-ink">Add evidence links and collaborators</h3>
-        <div className="mt-5 grid gap-4 lg:grid-cols-2">
-          <textarea
-            name="artifactLinks"
-            rows={5}
-            defaultValue={
-              initial?.artifactLinks.map((link) => `${link.label} | ${link.url}`).join("\n") ?? ""
-            }
-            placeholder="Artifact links, one per line: Label | https://..."
-            className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-          />
-          <textarea
-            name="references"
-            rows={5}
-            defaultValue={
-              initial?.references
-                .map((reference) =>
-                  [reference.label, reference.url, reference.sourceType, reference.note ?? ""]
-                    .filter(Boolean)
-                    .join(" | ")
-                )
-                .join("\n") ?? ""
-            }
-            placeholder="References, one per line: Label | https://... | DATASET | note"
-            className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-          />
-          <input
-            name="keywords"
-            defaultValue={initial?.keywords.join(", ") ?? ""}
-            placeholder="Keywords separated by commas"
-            className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-          />
-          <textarea
-            name="keyTakeaways"
-            rows={4}
-            defaultValue={initial?.keyTakeaways.join("\n") ?? ""}
-            placeholder="Key takeaways, one per line"
-            className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-          />
-        </div>
-
-        <div className="mt-6 rounded-2xl border border-line bg-white/55 p-4">
-          <p className="font-medium text-ink">Collaborators</p>
-          <div className="mt-3 grid gap-2 md:grid-cols-2">
-            {users
-              .filter((user) => user.id !== viewerId)
-              .map((user) => (
-                <label key={user.id} className="flex items-center gap-2 text-sm text-ink/72">
-                  <input
-                    type="checkbox"
-                    name="collaboratorIds"
-                    value={user.id}
-                    defaultChecked={initial?.collaboratorIds.includes(user.id)}
-                    className="rounded"
-                  />
-                  {user.name}
-                </label>
-              ))}
-          </div>
-        </div>
-
-        <div className="mt-6 grid gap-3 md:max-w-md">
-          {stepStatus.publishing.map((item) => (
-            <div key={item.label} className="rounded-2xl border border-line bg-white/55 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <p className="font-medium text-ink">{item.label}</p>
-                <span className={`rounded-full border px-3 py-1 font-mono text-[11px] uppercase tracking-[0.2em] ${statusTone(item.ready)}`}>
-                  {item.ready ? "Ready" : "Needed"}
-                </span>
-              </div>
-              <p className="mt-3 text-sm leading-6 text-ink/66">{item.detail}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="panel p-6">
-        <p className="font-mono text-xs uppercase tracking-[0.22em] text-accent">Step 6</p>
-        <h3 className="mt-3 font-display text-2xl text-ink">Review before you submit</h3>
-        <div className="mt-5 grid gap-4 lg:grid-cols-2">
-          <div className="rounded-2xl border border-line bg-white/60 p-4">
-            <p className="font-medium text-ink">What strong work includes</p>
-            <ul className="mt-3 space-y-2 text-sm leading-6 text-ink/68">
-              {template.checklist.map((item) => (
-                <li key={item.key} className="rounded-2xl border border-line bg-white/70 px-4 py-3">
-                  <span className="font-medium text-ink">{item.label}</span>
-                  <span className="block text-ink/62">{item.detail}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-          <div className="rounded-2xl border border-line bg-white/60 p-4">
-            <p className="font-medium text-ink">External publication readiness</p>
-            <ul className="mt-3 space-y-2 text-sm leading-6 text-ink/68">
-              {template.externalReadinessRules.map((rule) => (
-                <li key={rule} className="rounded-2xl border border-line bg-white/70 px-4 py-3">
-                  {rule}
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-
-        <textarea
-          name="findingsMd"
-          rows={6}
-          defaultValue={initial?.findingsMd ?? ""}
-          placeholder="Optional legacy markdown summary. If you leave this empty, the studio sections above become the saved publication body."
-          className="mt-4 w-full rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-        />
-
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-          <button
-            type="submit"
-            name="intent"
-            value="DRAFT"
-            className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm font-semibold text-ink"
-          >
-            Save draft
-          </button>
-          <button
-            type="submit"
-            name="intent"
-            value="SUBMITTED"
-            className="rounded-2xl border border-accent bg-accent px-4 py-3 text-sm font-semibold text-white"
-          >
-            {intentLabel}
-          </button>
-        </div>
-      </section>
+        }
+      >
+        {renderCurrentStep()}
+      </WizardShell>
     </form>
   );
 }

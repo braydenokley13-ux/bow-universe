@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import { Badge } from "@/components/badge";
 import { PrintButton } from "@/components/print-button";
 import { SectionHeading } from "@/components/section-heading";
+import { SourceLineageCard } from "@/components/source-lineage-card";
 import { getLaneLabel } from "@/lib/publications";
 import { publicationTypeLabels } from "@/lib/types";
 import {
@@ -44,17 +45,12 @@ export default async function PublicationDetailPage({
               {publication.lanePrimary ? <Badge>{getLaneLabel(publication.lanePrimary)}</Badge> : null}
               {publication.externalReady ? <Badge tone="success">External ready</Badge> : null}
             </div>
-            <div className="flex flex-wrap gap-3">
-              <PrintButton />
-              <Link
-                href={`/projects/${record.project.id}`}
-                className="print-hide rounded-full border border-line bg-white/75 px-4 py-2 text-sm font-medium text-ink"
-              >
-                Open source record
-              </Link>
-            </div>
+            <PrintButton />
           </div>
-          <p className="mt-5 text-sm leading-7 text-ink/72">{publication.citationText}</p>
+          <div className="mt-5 rounded-3xl border border-line bg-white/60 p-5">
+            <p className="font-mono text-xs uppercase tracking-[0.22em] text-accent">How to cite</p>
+            <p className="mt-3 text-sm leading-7 text-ink/72">{publication.citationText}</p>
+          </div>
         </section>
 
         <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
@@ -92,33 +88,49 @@ export default async function PublicationDetailPage({
             </div>
           </article>
 
-          <article className="panel p-6">
-            <h3 className="font-display text-2xl text-ink">Archive metadata</h3>
-            <div className="mt-5 space-y-3 text-sm leading-6 text-ink/70">
-              <p>Author line: {publication.authorLine}</p>
-              <p>Slug: {publication.slug}</p>
-              <p>Version: {publication.canonicalVersion}</p>
-              {publication.issue ? <p>Issue: {publication.issue.title}</p> : null}
-              {publication.team ? <p>Team: {publication.team.name}</p> : null}
-            </div>
+          <div className="space-y-6">
+            <SourceLineageCard
+              sourceType="PROJECT"
+              sourceTitle={record.project.title}
+              sourceHref={`/projects/${record.project.id}`}
+              workflowLabel={record.project.submissionStatus.replaceAll("_", " ")}
+              issueTitle={publication.issue?.title}
+              teamTitle={publication.team?.name}
+            />
+
+            <section className="panel p-6">
+              <h3 className="font-display text-2xl text-ink">Archive metadata</h3>
+              <div className="mt-5 space-y-3 text-sm leading-6 text-ink/70">
+                <p>Author line: {publication.authorLine}</p>
+                <p>Slug: {publication.slug}</p>
+                <p>Version: {publication.canonicalVersion}</p>
+                {publication.issue ? <p>Issue: {publication.issue.title}</p> : null}
+                {publication.team ? <p>Team: {publication.team.name}</p> : null}
+                {publication.season ? <p>Season: {publication.season.year}</p> : null}
+              </div>
+            </section>
 
             {parsed.references.length > 0 ? (
-              <div className="mt-6 space-y-3">
-                {parsed.references.map((reference) => (
-                  <a
-                    key={`${reference.label}-${reference.url}`}
-                    href={reference.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="block rounded-2xl border border-line bg-white/60 p-4 hover:border-accent"
-                  >
-                    <p className="font-medium text-ink">{reference.label}</p>
-                    <p className="mt-1 text-sm text-ink/62">{reference.sourceType}</p>
-                  </a>
-                ))}
-              </div>
+              <section className="panel p-6">
+                <h3 className="font-display text-2xl text-ink">References</h3>
+                <div className="mt-4 space-y-3">
+                  {parsed.references.map((reference) => (
+                    <a
+                      key={`${reference.label}-${reference.url}`}
+                      href={reference.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block rounded-2xl border border-line bg-white/60 p-4 hover:border-accent"
+                    >
+                      <p className="font-medium text-ink">{reference.label}</p>
+                      <p className="mt-1 text-sm text-ink/62">{reference.sourceType}</p>
+                      {reference.note ? <p className="mt-2 text-sm leading-6 text-ink/68">{reference.note}</p> : null}
+                    </a>
+                  ))}
+                </div>
+              </section>
             ) : null}
-          </article>
+          </div>
         </section>
       </div>
     );
@@ -144,17 +156,12 @@ export default async function PublicationDetailPage({
             <Badge>{publicationTypeLabels[publication.publicationType]}</Badge>
             {publication.externalReady ? <Badge tone="success">External ready</Badge> : null}
           </div>
-          <div className="flex flex-wrap gap-3">
-            <PrintButton />
-            <Link
-              href={`/proposals/${record.proposal.id}`}
-              className="print-hide rounded-full border border-line bg-white/75 px-4 py-2 text-sm font-medium text-ink"
-            >
-              Open source record
-            </Link>
-          </div>
+          <PrintButton />
         </div>
-        <p className="mt-5 text-sm leading-7 text-ink/72">{publication.citationText}</p>
+        <div className="mt-5 rounded-3xl border border-line bg-white/60 p-5">
+          <p className="font-mono text-xs uppercase tracking-[0.22em] text-accent">How to cite</p>
+          <p className="mt-3 text-sm leading-7 text-ink/72">{publication.citationText}</p>
+        </div>
       </section>
 
       <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
@@ -193,33 +200,49 @@ export default async function PublicationDetailPage({
           </div>
         </article>
 
-        <article className="panel p-6">
-          <h3 className="font-display text-2xl text-ink">Archive metadata</h3>
-          <div className="mt-5 space-y-3 text-sm leading-6 text-ink/70">
-            <p>Author line: {publication.authorLine}</p>
-            <p>Slug: {publication.slug}</p>
-            <p>Version: {publication.canonicalVersion}</p>
-            {publication.issue ? <p>Issue: {publication.issue.title}</p> : null}
-            {publication.team ? <p>Team: {publication.team.name}</p> : null}
-          </div>
+        <div className="space-y-6">
+          <SourceLineageCard
+            sourceType="PROPOSAL"
+            sourceTitle={record.proposal.title}
+            sourceHref={`/proposals/${record.proposal.id}`}
+            workflowLabel={record.proposal.status.replaceAll("_", " ")}
+            issueTitle={publication.issue?.title}
+            teamTitle={publication.team?.name}
+          />
+
+          <section className="panel p-6">
+            <h3 className="font-display text-2xl text-ink">Archive metadata</h3>
+            <div className="mt-5 space-y-3 text-sm leading-6 text-ink/70">
+              <p>Author line: {publication.authorLine}</p>
+              <p>Slug: {publication.slug}</p>
+              <p>Version: {publication.canonicalVersion}</p>
+              {publication.issue ? <p>Issue: {publication.issue.title}</p> : null}
+              {publication.team ? <p>Team: {publication.team.name}</p> : null}
+              {publication.season ? <p>Season: {publication.season.year}</p> : null}
+            </div>
+          </section>
 
           {parsed.references.length > 0 ? (
-            <div className="mt-6 space-y-3">
-              {parsed.references.map((reference) => (
-                <a
-                  key={`${reference.label}-${reference.url}`}
-                  href={reference.url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="block rounded-2xl border border-line bg-white/60 p-4 hover:border-accent"
-                >
-                  <p className="font-medium text-ink">{reference.label}</p>
-                  <p className="mt-1 text-sm text-ink/62">{reference.sourceType}</p>
-                </a>
-              ))}
-            </div>
+            <section className="panel p-6">
+              <h3 className="font-display text-2xl text-ink">References</h3>
+              <div className="mt-4 space-y-3">
+                {parsed.references.map((reference) => (
+                  <a
+                    key={`${reference.label}-${reference.url}`}
+                    href={reference.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block rounded-2xl border border-line bg-white/60 p-4 hover:border-accent"
+                  >
+                    <p className="font-medium text-ink">{reference.label}</p>
+                    <p className="mt-1 text-sm text-ink/62">{reference.sourceType}</p>
+                    {reference.note ? <p className="mt-2 text-sm leading-6 text-ink/68">{reference.note}</p> : null}
+                  </a>
+                ))}
+              </div>
+            </section>
           ) : null}
-        </article>
+        </div>
       </section>
     </div>
   );

@@ -4,18 +4,19 @@ import { useState } from "react";
 
 import {
   getFieldStateLabel,
-  type ProposalCoachFieldEvaluation
-} from "@/lib/proposal-wizard";
+  type CoachFieldEvaluationLike,
+  type CoachFieldState
+} from "@/lib/coach-ui";
 
 import { ExampleCompareCard } from "./example-compare-card";
 import { StarterChipRow } from "./starter-chip-row";
 
 type FieldCoachProps = {
-  evaluation: ProposalCoachFieldEvaluation;
+  evaluation: CoachFieldEvaluationLike;
   onUseStarter?: (starter: string) => void;
 };
 
-function toneForState(state: ProposalCoachFieldEvaluation["state"]) {
+function toneForState(state: CoachFieldState) {
   switch (state) {
     case "ready":
       return "border-success/30 bg-success/10 text-success";
@@ -34,6 +35,8 @@ export function FieldCoach({ evaluation, onUseStarter }: FieldCoachProps) {
   const [showStarters, setShowStarters] = useState(false);
   const [showExamples, setShowExamples] = useState(false);
   const [showChecklist, setShowChecklist] = useState(false);
+  const starterItems = showStarters ? evaluation.starters : evaluation.starters.slice(0, 2);
+  const fastFix = evaluation.missingIngredients[0] ?? evaluation.recipe[0] ?? evaluation.nextMove;
 
   return (
     <div className="mt-4 rounded-2xl border border-line bg-panel/70 p-4">
@@ -47,6 +50,18 @@ export function FieldCoach({ evaluation, onUseStarter }: FieldCoachProps) {
         </span>
       </div>
 
+      <div className="mt-4 rounded-2xl border border-accent/20 bg-accent/5 px-4 py-3">
+        <p className="font-medium text-ink">Fast fix</p>
+        <p className="mt-2 text-sm leading-6 text-ink/68">{fastFix}</p>
+      </div>
+
+      {starterItems.length > 0 && onUseStarter ? (
+        <div className="mt-4">
+          <p className="font-medium text-ink">Start here</p>
+          <StarterChipRow starters={starterItems} onSelect={onUseStarter} />
+        </div>
+      ) : null}
+
       <div className="mt-4 flex flex-wrap gap-2">
         {evaluation.starters.length > 0 ? (
           <button
@@ -54,7 +69,7 @@ export function FieldCoach({ evaluation, onUseStarter }: FieldCoachProps) {
             onClick={() => setShowStarters((current) => !current)}
             className="rounded-full border border-line bg-white/80 px-3 py-2 text-xs font-semibold text-ink"
           >
-            Give me a starter
+            {showStarters ? "Show fewer starters" : "Show more starters"}
           </button>
         ) : null}
         <button
@@ -72,10 +87,6 @@ export function FieldCoach({ evaluation, onUseStarter }: FieldCoachProps) {
           Tell me what I forgot
         </button>
       </div>
-
-      {showStarters && onUseStarter ? (
-        <StarterChipRow starters={evaluation.starters} onSelect={onUseStarter} />
-      ) : null}
 
       {showExamples ? (
         <ExampleCompareCard

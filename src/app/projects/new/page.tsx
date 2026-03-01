@@ -32,9 +32,9 @@ export default async function NewProjectPage({
   return (
     <div className="space-y-8">
       <SectionHeading
-        eyebrow="Project Studio"
-        title="Build a publishable research project"
-        description="The studio is where students move from an idea to a polished brief, memo, tool write-up, or strategy dossier. The form below is structured so the same record can later be published inside BOW Universe and externally on the web or as a PDF."
+        eyebrow="Project Coach"
+        title="Adaptive lane-by-lane project wizard"
+        description="This studio now coaches every lane one small step at a time. Tool Builders, Policy Reform Architects, Strategic Operators, and Economic Investigators each get lane-specific prompts, section coaching, and a stronger review gate before anything is submitted."
       />
 
       {viewer ? (

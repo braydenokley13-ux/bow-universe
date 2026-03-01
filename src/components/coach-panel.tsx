@@ -1,11 +1,8 @@
-import type {
-  ProposalCoachStepDefinition,
-  ProposalCoachStepEvaluation
-} from "@/lib/proposal-wizard";
+import type { CoachStepDefinitionLike, CoachStepEvaluationLike } from "@/lib/coach-ui";
 
 type CoachPanelProps = {
-  step: ProposalCoachStepDefinition;
-  evaluation: ProposalCoachStepEvaluation;
+  step: CoachStepDefinitionLike;
+  evaluation: CoachStepEvaluationLike;
 };
 
 export function CoachPanel({ step, evaluation }: CoachPanelProps) {

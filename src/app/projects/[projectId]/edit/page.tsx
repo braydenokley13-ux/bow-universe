@@ -27,7 +27,7 @@ export default async function EditProjectPage({ params }: { params: { projectId:
       <SectionHeading
         eyebrow="Project Studio"
         title={`Revise ${project.title}`}
-        description="This route reopens the structured studio so a draft or revision request can become a stronger publication-ready piece."
+        description="This route reopens the adaptive project coach so students can strengthen the lane-specific sections, improve weak evidence or analysis, and resubmit a more publication-ready project."
       />
 
       <ProjectStudioForm

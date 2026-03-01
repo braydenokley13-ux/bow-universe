@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { Badge } from "@/components/badge";
 import { SectionHeading } from "@/components/section-heading";
+import { classifyIssueWorkGap, summarizeIssuesFilter } from "@/lib/discovery-guidance";
 import { parseIssueMetrics, getIssuesPageData } from "@/server/data";
 
 function toneForSeverity(severity: number) {
@@ -37,7 +38,7 @@ export default async function IssuesPage({
       <SectionHeading
         eyebrow="Issues Board"
         title="Systemic league problems"
-        description={`Issues are now real records in Prisma. ${filteredIssues.length} issues match the current filters.`}
+        description={`${summarizeIssuesFilter(selectedStatus, selectedSeverity, filteredIssues.length)}. Each card now shows what work is still missing so students know where to start.`}
       />
 
       <section className="panel p-4">
@@ -66,13 +67,15 @@ export default async function IssuesPage({
       <section className="space-y-4">
         {filteredIssues.map((issue) => {
           const metrics = parseIssueMetrics(issue.metricsJson);
+          const gap = classifyIssueWorkGap({
+            id: issue.id,
+            title: issue.title,
+            proposals: issue.proposals,
+            projectLinks: issue.projectLinks
+          });
 
           return (
-            <Link
-              key={issue.id}
-              href={`/issues/${issue.id}`}
-              className="panel block p-6 hover:border-accent"
-            >
+            <article key={issue.id} className="panel p-6">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="space-y-2">
                   <div className="flex flex-wrap gap-2">
@@ -82,9 +85,11 @@ export default async function IssuesPage({
                   </div>
                   <h3 className="font-display text-2xl text-ink">{issue.title}</h3>
                   <p className="max-w-3xl text-sm leading-6 text-ink/70">{issue.description}</p>
+                  <p className="text-sm leading-6 text-ink/62">{gap.summary}</p>
                 </div>
                 <div className="text-sm text-ink/62">
-                  {issue.projectLinks.length} linked project{issue.projectLinks.length === 1 ? "" : "s"}
+                  {issue.projectLinks.length} linked project{issue.projectLinks.length === 1 ? "" : "s"} ·{" "}
+                  {issue.proposals.length} linked memo{issue.proposals.length === 1 ? "" : "s"}
                 </div>
               </div>
 
@@ -106,7 +111,28 @@ export default async function IssuesPage({
                   <p className="mt-2 text-sm text-ink/75">{metrics.smallVsBigCompetitiveness ?? "-"}</p>
                 </div>
               </div>
-            </Link>
+
+              <div className="mt-5 flex flex-wrap gap-3">
+                <Link
+                  href={`/proposals/new?issueId=${issue.id}`}
+                  className="rounded-full border border-accent bg-accent px-4 py-2 text-sm font-medium text-white"
+                >
+                  Draft proposal
+                </Link>
+                <Link
+                  href="/projects/new"
+                  className="rounded-full border border-line bg-white/80 px-4 py-2 text-sm font-medium text-ink"
+                >
+                  Start project
+                </Link>
+                <Link
+                  href={`/issues/${issue.id}`}
+                  className="rounded-full border border-line bg-white/80 px-4 py-2 text-sm font-medium text-ink"
+                >
+                  Open issue
+                </Link>
+              </div>
+            </article>
           );
         })}
       </section>
