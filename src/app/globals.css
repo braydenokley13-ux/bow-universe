@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-display: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif;
+  --font-body: "Avenir Next", "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", Menlo, monospace;
+}
+
+html {
+  background:
+    radial-gradient(circle at top left, rgba(216, 227, 229, 0.7), transparent 30%),
+    linear-gradient(180deg, #f6f1e8 0%, #f0eadf 100%);
+}
+
+body {
+  @apply min-h-screen bg-transparent text-ink antialiased;
+}
+
+a {
+  @apply transition-colors;
+}
+
+::selection {
+  background: rgba(68, 96, 109, 0.18);
+}
+
+.metric-grid {
+  @apply grid gap-4 md:grid-cols-2 xl:grid-cols-4;
+}
+
+.panel {
+  @apply rounded-2xl border border-line bg-panel/90 shadow-panel backdrop-blur-sm;
+}
+
+.table-shell {
+  @apply overflow-hidden rounded-2xl border border-line bg-panel/95 shadow-panel;
+}

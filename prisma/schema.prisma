@@ -1,0 +1,312 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  STUDENT
+  ADMIN
+}
+
+enum MarketSizeTier {
+  SMALL
+  MID
+  LARGE
+  MEGA
+}
+
+enum ProposalStatus {
+  DRAFT
+  SUBMITTED
+  VOTING
+  DECISION
+}
+
+enum VoteValue {
+  YES
+  NO
+}
+
+enum DecisionType {
+  APPROVE
+  DENY
+  AMEND
+}
+
+enum IssueStatus {
+  OPEN
+  IN_REVIEW
+  RESOLVED
+}
+
+enum ProjectType {
+  TOOL
+  INVESTIGATION
+  STRATEGY
+  PROPOSAL_SUPPORT
+}
+
+model User {
+  id                    String                 @id @default(cuid())
+  name                  String
+  email                 String                 @unique
+  passwordHash          String
+  role                  UserRole               @default(STUDENT)
+  createdAt             DateTime               @default(now())
+  createdRuleSets       RuleSet[]              @relation("RuleSetCreatedBy")
+  createdProposals      Proposal[]             @relation("ProposalCreatedBy")
+  createdIssues         Issue[]                @relation("IssueCreatedBy")
+  createdProjects       Project[]              @relation("ProjectCreatedBy")
+  createdComments       ProjectComment[]
+  votes                 Vote[]
+  decisions             CommissionerDecision[] @relation("DecisionByUser")
+  projectCollaborations ProjectCollaborator[]
+  activityEvents        ActivityEvent[]        @relation("ActivityByUser")
+}
+
+model Team {
+  id                   String       @id @default(cuid())
+  name                 String
+  slug                 String       @unique
+  marketSizeTier       MarketSizeTier
+  ownerProfile         String
+  ownerDisciplineScore Float
+  createdAt            DateTime     @default(now())
+  contracts            Contract[]
+  teamSeasons          TeamSeason[]
+  projects             Project[]
+  issues               Issue[]
+}
+
+model Season {
+  id              String      @id @default(cuid())
+  year            Int         @unique
+  activeRuleSetId String
+  capNumber       Float
+  createdAt       DateTime    @default(now())
+  activeRuleSet   RuleSet     @relation("SeasonActiveRuleSet", fields: [activeRuleSetId], references: [id], onDelete: Restrict)
+  teamSeasons     TeamSeason[]
+
+  @@index([activeRuleSetId])
+  @@index([createdAt])
+}
+
+model Contract {
+  id               String   @id @default(cuid())
+  teamId           String
+  playerName       String
+  startYear        Int
+  years            Int
+  annualSalaryJson Json
+  notes            String?
+  team             Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@index([teamId])
+}
+
+model TeamSeason {
+  id               String   @id @default(cuid())
+  teamId           String
+  seasonId         String
+  payroll          Float
+  taxPaid          Float
+  revenue          Float
+  valuation        Float
+  performanceProxy Float
+  createdAt        DateTime @default(now())
+  season           Season   @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+  team             Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+
+  @@unique([teamId, seasonId])
+  @@index([seasonId])
+}
+
+model RuleSet {
+  id                  String     @id @default(cuid())
+  version             Int        @unique
+  isActive            Boolean    @default(false)
+  rulesJson           Json
+  changeSummaryJson   Json?
+  effectiveSeasonYear Int?
+  sourceProposalId    String?
+  createdAt           DateTime   @default(now())
+  createdByUserId     String
+  createdBy           User       @relation("RuleSetCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  seasons             Season[]   @relation("SeasonActiveRuleSet")
+  targetProposals     Proposal[] @relation("ProposalTargetRuleSet")
+  sourceProposal      Proposal?  @relation("RuleSetSourceProposal", fields: [sourceProposalId], references: [id], onDelete: SetNull)
+
+  @@index([createdByUserId])
+  @@index([effectiveSeasonYear])
+  @@index([isActive])
+  @@index([createdAt])
+}
+
+model Proposal {
+  id                String                 @id @default(cuid())
+  title             String
+  issueId           String
+  createdByUserId   String
+  status            ProposalStatus         @default(DRAFT)
+  ruleSetIdTarget   String
+  diffJson          Json
+  narrativeJson     Json
+  sandboxResultJson Json?
+  voteStart         DateTime?
+  voteEnd           DateTime?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  issue             Issue                  @relation(fields: [issueId], references: [id], onDelete: Restrict)
+  createdBy         User                   @relation("ProposalCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  targetRuleSet     RuleSet                @relation("ProposalTargetRuleSet", fields: [ruleSetIdTarget], references: [id], onDelete: Restrict)
+  votes             Vote[]
+  decision          CommissionerDecision?
+  supportingProjects Project[]
+  sourceRuleSets    RuleSet[]              @relation("RuleSetSourceProposal")
+
+  @@index([issueId])
+  @@index([createdByUserId])
+  @@index([ruleSetIdTarget])
+  @@index([status])
+  @@index([createdAt])
+  @@index([voteStart, voteEnd])
+}
+
+model Vote {
+  id         String    @id @default(cuid())
+  proposalId String
+  userId     String
+  value      VoteValue
+  createdAt  DateTime  @default(now())
+  proposal   Proposal  @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([proposalId, userId])
+  @@index([userId])
+}
+
+model CommissionerDecision {
+  id              String       @id @default(cuid())
+  proposalId      String       @unique
+  decidedByUserId String
+  decision        DecisionType
+  notes           String?
+  amendedDiffJson Json?
+  decidedAt       DateTime     @default(now())
+  proposal        Proposal     @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+  decidedBy       User         @relation("DecisionByUser", fields: [decidedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([decidedByUserId])
+}
+
+model Issue {
+  id              String       @id @default(cuid())
+  title           String
+  slug            String       @unique
+  description     String
+  severity        Int
+  status          IssueStatus  @default(OPEN)
+  metricsJson     Json?
+  evidenceMd      String?
+  teamId          String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  createdByUserId String
+  createdBy       User         @relation("IssueCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  team            Team?        @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  proposals       Proposal[]
+  primaryProjects Project[]    @relation("PrimaryProjectIssue")
+  projectLinks    ProjectIssue[]
+
+  @@index([status])
+  @@index([severity])
+  @@index([teamId])
+  @@index([createdByUserId])
+  @@index([createdAt])
+}
+
+model Project {
+  id                   String                @id @default(cuid())
+  title                String
+  summary              String
+  projectType          ProjectType
+  laneTagsJson         Json
+  issueId              String?
+  teamId               String?
+  supportingProposalId String?
+  artifactLinksJson    Json
+  findingsMd          String
+  createdByUserId     String
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  primaryIssue        Issue?                @relation("PrimaryProjectIssue", fields: [issueId], references: [id], onDelete: SetNull)
+  team                Team?                 @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  supportingProposal  Proposal?             @relation(fields: [supportingProposalId], references: [id], onDelete: SetNull)
+  createdBy           User                  @relation("ProjectCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  issueLinks          ProjectIssue[]
+  collaborators       ProjectCollaborator[]
+  comments            ProjectComment[]
+
+  @@index([issueId])
+  @@index([teamId])
+  @@index([createdByUserId])
+  @@index([projectType])
+  @@index([supportingProposalId])
+  @@index([createdAt])
+}
+
+model ProjectIssue {
+  projectId String
+  issueId   String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  issue     Issue   @relation(fields: [issueId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, issueId])
+  @@index([issueId])
+}
+
+model ProjectCollaborator {
+  projectId String
+  userId    String
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([projectId, userId])
+  @@index([userId])
+}
+
+model ProjectComment {
+  id        String   @id @default(cuid())
+  projectId String
+  userId    String
+  body      String
+  createdAt DateTime @default(now())
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model ActivityEvent {
+  id              String   @id @default(cuid())
+  type            String
+  title           String
+  summary         String
+  entityType      String?
+  entityId        String?
+  metadataJson    Json?
+  createdAt       DateTime @default(now())
+  createdByUserId String?
+  createdBy       User?    @relation("ActivityByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([type])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@index([createdByUserId])
+}
