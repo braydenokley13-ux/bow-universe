@@ -14,9 +14,9 @@ export default async function NewProposalPage() {
   return (
     <div className="space-y-8">
       <SectionHeading
-        eyebrow="New Proposal"
-        title="Guided reform form"
-        description="This route now saves real proposal records. Students can connect a problem to an issue, choose the active ruleset, and store a structured rule diff."
+        eyebrow="Proposal Coach"
+        title="Adaptive policy memo wizard"
+        description="This studio now guides students one small decision at a time. It helps them connect a live issue to the active RuleSet, build a real rule diff, test it in the sandbox, and only submit once the memo is truly review-ready."
       />
 
       {viewer ? (

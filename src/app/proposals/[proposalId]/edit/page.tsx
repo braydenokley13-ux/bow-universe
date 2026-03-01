@@ -34,7 +34,7 @@ export default async function EditProposalPage({ params }: { params: { proposalI
       <SectionHeading
         eyebrow="Proposal Studio"
         title={`Revise ${studioData.proposal.title}`}
-        description="This route reopens the proposal memo so students can respond to feedback, strengthen the writing, and keep the policy record publication-ready."
+        description="This route reopens the adaptive proposal coach so students can respond to feedback step by step, strengthen weak sections, refresh their sandbox evidence, and resubmit a cleaner memo."
       />
 
       <ProposalForm

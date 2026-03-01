@@ -1,12 +1,38 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import type { Issue, RuleSet } from "@prisma/client";
 
-import { publicationTypeLabels } from "@/lib/types";
-import type { ProposalSubmissionContent, SandboxImpactReport } from "@/lib/types";
+import { ProposalStepAbstract } from "@/components/proposal-step-abstract";
+import { ProposalStepAction } from "@/components/proposal-step-action";
+import { ProposalStepCurrentRule } from "@/components/proposal-step-current-rule";
+import { ProposalStepImpact } from "@/components/proposal-step-impact";
+import { ProposalStepIssue } from "@/components/proposal-step-issue";
+import { ProposalStepProblem } from "@/components/proposal-step-problem";
+import { ProposalStepReform } from "@/components/proposal-step-reform";
+import { ProposalStepReview } from "@/components/proposal-step-review";
+import { ProposalStepRuleset } from "@/components/proposal-step-ruleset";
+import { ProposalStepSandbox } from "@/components/proposal-step-sandbox";
+import { ProposalStepTitle } from "@/components/proposal-step-title";
+import { ProposalStepTradeoffs } from "@/components/proposal-step-tradeoffs";
+import { WizardFooter } from "@/components/wizard-footer";
+import { WizardShell } from "@/components/wizard-shell";
+import { WizardStepRail } from "@/components/wizard-step-rail";
+import {
+  assessProposalCoach,
+  createInitialProposalCoachValues,
+  getProposalCoachDomId,
+  getSandboxFingerprint,
+  isProposalCoachStepId,
+  proposalCoachStepOrder,
+  proposalCoachSteps,
+  type ProposalCoachFieldId,
+  type ProposalCoachStepId,
+  type ProposalCoachValues
+} from "@/lib/proposal-wizard";
+import type { SandboxImpactReport } from "@/lib/types";
 
 type ProposalFormProps = {
   issues: Array<Issue & { team?: { name: string } | null }>;
@@ -36,253 +62,141 @@ type ProposalFormProps = {
   intentLabel: string;
 };
 
-type MemoDraftSnapshot = {
-  title: string;
-  abstract: string;
-  problem: string;
-  currentRuleContext: string;
-  proposedChange: string;
-  impactAnalysis: string;
-  tradeoffs: string;
-  sandboxInterpretation: string;
-  recommendation: string;
-  references: string;
-  diffJson: string;
-};
-
-type DraftCheck = {
-  completeCount: number;
-  totalCount: number;
-  critical: string[];
-  caution: string[];
-};
-
 type AutosaveState = {
   tone: "idle" | "saving" | "saved" | "error";
   message: string;
 };
 
-type StepStatusItem = {
-  label: string;
-  ready: boolean;
-  detail: string;
+const fieldNameById: Record<Exclude<ProposalCoachFieldId, "sandboxResult">, string> = {
+  issueId: "issueId",
+  ruleSetId: "ruleSetId",
+  title: "title",
+  abstract: "abstract",
+  problem: "problem",
+  currentRuleContext: "currentRuleContext",
+  proposedChange: "proposedChange",
+  expectedImpact: "expectedImpact",
+  tradeoffs: "tradeoffs",
+  recommendation: "recommendation",
+  methodsSummary: "methodsSummary",
+  diffJson: "diffJson",
+  sandboxInterpretation: "sandboxInterpretation",
+  references: "references",
+  keywords: "keywords",
+  keyTakeaways: "keyTakeaways",
+  publicationSlug: "publicationSlug"
 };
 
-function fieldValue(content: ProposalSubmissionContent | null | undefined, key: keyof ProposalSubmissionContent) {
-  return content?.[key] ?? "";
+function hasAnyDraftContent(values: ProposalCoachValues, sandboxResult: SandboxImpactReport | null) {
+  return Object.values(values).some((value) => value.trim().length > 0) || Boolean(sandboxResult);
 }
 
-function textReady(value: string) {
-  return value.trim().length >= 12;
+function buildProposalFormData(
+  values: ProposalCoachValues,
+  draftId: string,
+  sandboxResult: SandboxImpactReport | null
+) {
+  const formData = new FormData();
+
+  if (draftId) {
+    formData.set("proposalId", draftId);
+  }
+
+  for (const [fieldId, name] of Object.entries(fieldNameById) as Array<
+    [Exclude<ProposalCoachFieldId, "sandboxResult">, string]
+  >) {
+    formData.set(name, values[fieldId]);
+  }
+
+  formData.set("sandboxResultJson", sandboxResult ? JSON.stringify(sandboxResult) : "");
+  return formData;
 }
 
-function readMemoDraft(form: HTMLFormElement): MemoDraftSnapshot {
-  const formData = new FormData(form);
+function applyStarter(
+  currentValue: string,
+  starter: string,
+  fieldId: ProposalCoachFieldId
+) {
+  if (!currentValue.trim()) {
+    return starter;
+  }
 
-  return {
-    title: String(formData.get("title") ?? ""),
-    abstract: String(formData.get("abstract") ?? ""),
-    problem: String(formData.get("problem") ?? ""),
-    currentRuleContext: String(formData.get("currentRuleContext") ?? ""),
-    proposedChange: String(formData.get("proposedChange") ?? ""),
-    impactAnalysis: String(formData.get("expectedImpact") ?? ""),
-    tradeoffs: String(formData.get("tradeoffs") ?? ""),
-    sandboxInterpretation: String(formData.get("sandboxInterpretation") ?? ""),
-    recommendation: String(formData.get("recommendation") ?? ""),
-    references: String(formData.get("references") ?? ""),
-    diffJson: String(formData.get("diffJson") ?? "")
-  };
+  if (fieldId === "title" || fieldId === "publicationSlug" || fieldId === "keywords") {
+    return currentValue;
+  }
+
+  if (currentValue.includes(starter)) {
+    return currentValue;
+  }
+
+  return `${currentValue.trim()}\n\n${starter}`;
 }
 
-function hasAnyDraftContent(snapshot: MemoDraftSnapshot) {
-  return Object.values(snapshot).some((value) => value.trim().length > 0);
-}
-
-function buildDraftCheck(snapshot: MemoDraftSnapshot, sandboxSaved: boolean): DraftCheck {
-  const critical: string[] = [];
-  const caution: string[] = [];
-
-  if (!textReady(snapshot.title)) {
-    critical.push("Add a clear memo title.");
-  }
-  if (!textReady(snapshot.abstract)) {
-    critical.push("Write the executive summary.");
-  }
-  if (!textReady(snapshot.problem)) {
-    critical.push("Explain the league problem.");
-  }
-  if (!textReady(snapshot.currentRuleContext)) {
-    critical.push("Explain the current rule context.");
-  }
-  if (!textReady(snapshot.proposedChange)) {
-    critical.push("Describe the proposed rule change.");
-  }
-  if (!textReady(snapshot.impactAnalysis)) {
-    critical.push("Add the expected impact analysis.");
-  }
-  if (!textReady(snapshot.recommendation)) {
-    critical.push("End with a concrete recommendation.");
-  }
-
-  if (!textReady(snapshot.tradeoffs)) {
-    caution.push("Tradeoffs still need more detail.");
-  }
-  if (!textReady(snapshot.sandboxInterpretation)) {
-    caution.push("Explain what the sandbox result means.");
-  }
-  if (!sandboxSaved) {
-    caution.push("Run the sandbox so this memo includes model evidence.");
-  }
-  if (!textReady(snapshot.references)) {
-    caution.push("Add at least one reference or source link.");
-  }
-  if (!textReady(snapshot.diffJson)) {
-    caution.push("The structured rule diff still looks incomplete.");
-  }
-
-  const checks = [
-    textReady(snapshot.title),
-    textReady(snapshot.abstract),
-    textReady(snapshot.problem),
-    textReady(snapshot.currentRuleContext),
-    textReady(snapshot.proposedChange),
-    textReady(snapshot.impactAnalysis),
-    textReady(snapshot.tradeoffs),
-    textReady(snapshot.sandboxInterpretation),
-    textReady(snapshot.recommendation),
-    sandboxSaved,
-    textReady(snapshot.references),
-    textReady(snapshot.diffJson)
-  ];
-
-  return {
-    completeCount: checks.filter(Boolean).length,
-    totalCount: checks.length,
-    critical,
-    caution
-  };
-}
-
-function buildStepStatusItems(snapshot: MemoDraftSnapshot, sandboxSaved: boolean) {
-  return {
-    opening: [
-      {
-        label: "Title",
-        ready: textReady(snapshot.title),
-        detail: "A reader should understand the reform topic right away."
-      },
-      {
-        label: "Executive summary",
-        ready: textReady(snapshot.abstract),
-        detail: "Explain the problem, the reform, and the likely effect in a short opening."
-      }
-    ] satisfies StepStatusItem[],
-    memoBody: [
-      {
-        label: "Problem",
-        ready: textReady(snapshot.problem),
-        detail: "Name the league problem clearly."
-      },
-      {
-        label: "Current rule context",
-        ready: textReady(snapshot.currentRuleContext),
-        detail: "Show what the league does now before suggesting change."
-      },
-      {
-        label: "Proposed change",
-        ready: textReady(snapshot.proposedChange),
-        detail: "State the rule reform in plain language."
-      },
-      {
-        label: "Impact analysis",
-        ready: textReady(snapshot.impactAnalysis),
-        detail: "Explain who benefits, who loses flexibility, and why."
-      },
-      {
-        label: "Tradeoffs",
-        ready: textReady(snapshot.tradeoffs),
-        detail: "Show what might get harder if the reform is adopted."
-      },
-      {
-        label: "Recommendation",
-        ready: textReady(snapshot.recommendation),
-        detail: "End with a clear next step for the league."
-      }
-    ] satisfies StepStatusItem[],
-    modelReadiness: [
-      {
-        label: "Structured rule diff",
-        ready: textReady(snapshot.diffJson),
-        detail: "The memo needs a usable rule diff, not just a rough idea."
-      },
-      {
-        label: "Sandbox evidence",
-        ready: sandboxSaved,
-        detail: "Run the sandbox so the memo includes model evidence."
-      },
-      {
-        label: "Sandbox interpretation",
-        ready: textReady(snapshot.sandboxInterpretation),
-        detail: "Explain what the model result means for the league."
-      },
-      {
-        label: "References",
-        ready: textReady(snapshot.references),
-        detail: "Add at least one source behind the memo."
-      }
-    ] satisfies StepStatusItem[]
-  };
-}
-
-function statusTone(ready: boolean) {
-  return ready
-    ? "border-success/30 bg-success/10 text-success"
-    : "border-warn/30 bg-warn/10 text-warn";
+function resolveStep(stepParam: string | null, fallback: ProposalCoachStepId) {
+  return isProposalCoachStepId(stepParam) ? stepParam : fallback;
 }
 
 export function ProposalForm({ issues, ruleSets, action, initial, intentLabel }: ProposalFormProps) {
   const router = useRouter();
-  const formRef = useRef<HTMLFormElement>(null);
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const autosaveTimerRef = useRef<number | null>(null);
+  const stepSyncRef = useRef(false);
+  const autosaveReadyRef = useRef(false);
+  const currentStepQuery = searchParams.get("step");
   const [draftId, setDraftId] = useState(initial?.id ?? "");
-  const [draftSnapshot, setDraftSnapshot] = useState<MemoDraftSnapshot>({
-    title: initial?.title ?? "",
-    abstract: initial?.abstract ?? "",
-    problem: initial?.problem ?? "",
-    currentRuleContext: initial?.currentRuleContext ?? "",
-    proposedChange: initial?.proposedChange ?? "",
-    impactAnalysis: initial?.impactAnalysis ?? "",
-    tradeoffs: initial?.tradeoffs ?? "",
-    sandboxInterpretation: initial?.sandboxInterpretation ?? "",
-    recommendation: initial?.recommendation ?? "",
-    references: initial?.referencesText ?? "",
-    diffJson: initial?.diffJson ?? ""
-  });
+  const [values, setValues] = useState<ProposalCoachValues>(() =>
+    createInitialProposalCoachValues({
+      title: initial?.title ?? "",
+      issueId: initial?.issueId ?? "",
+      ruleSetId: initial?.ruleSetId ?? ruleSets[0]?.id ?? "",
+      abstract: initial?.abstract ?? "",
+      methodsSummary: initial?.methodsSummary ?? "",
+      problem: initial?.problem ?? "",
+      currentRuleContext: initial?.currentRuleContext ?? "",
+      proposedChange: initial?.proposedChange ?? "",
+      expectedImpact: initial?.impactAnalysis ?? "",
+      tradeoffs: initial?.tradeoffs ?? "",
+      sandboxInterpretation: initial?.sandboxInterpretation ?? "",
+      recommendation: initial?.recommendation ?? "",
+      diffJson: initial?.diffJson ?? "",
+      references: initial?.referencesText ?? "",
+      keywords: initial?.keywordsText ?? "",
+      keyTakeaways: initial?.keyTakeawaysText ?? "",
+      publicationSlug: initial?.publicationSlug ?? ""
+    })
+  );
   const [sandboxResult, setSandboxResult] = useState<SandboxImpactReport | null>(
     initial?.sandboxResult ?? null
+  );
+  const [sandboxRunFingerprint, setSandboxRunFingerprint] = useState<string | null>(() =>
+    initial?.sandboxResult ? getSandboxFingerprint(initial.ruleSetId, initial.diffJson) : null
   );
   const [sandboxError, setSandboxError] = useState<string | null>(null);
   const [autosaveState, setAutosaveState] = useState<AutosaveState>({
     tone: "idle",
     message: initial?.id ? "Draft loaded." : "Autosave starts after you begin writing."
   });
-  const [draftCheck, setDraftCheck] = useState<DraftCheck>({
-    completeCount: 0,
-    totalCount: 12,
-    critical: [],
-    caution: []
-  });
+  const [carryForwardWarnings, setCarryForwardWarnings] = useState<string[]>([]);
   const [isPending, startTransition] = useTransition();
 
-  useEffect(() => {
-    if (!formRef.current) {
-      return;
-    }
+  const assessment = assessProposalCoach(values, {
+    result: sandboxResult,
+    runFingerprint: sandboxRunFingerprint
+  });
 
-    const snapshot = readMemoDraft(formRef.current);
-    setDraftSnapshot(snapshot);
-    setDraftCheck(buildDraftCheck(snapshot, Boolean(sandboxResult)));
-  }, [sandboxResult]);
+  const [currentStepId, setCurrentStepId] = useState<ProposalCoachStepId>(() =>
+    resolveStep(currentStepQuery, assessment.firstIncompleteStepId)
+  );
+
+  const currentStepIndex = proposalCoachStepOrder.indexOf(currentStepId);
+  const currentStep = proposalCoachSteps[currentStepId];
+  const currentStepEvaluation = assessment.steps[currentStepId];
+  const completedSteps = proposalCoachStepOrder.filter((stepId) => {
+    const status = assessment.steps[stepId].status;
+    return status === "strong" || status === "done";
+  }).length;
+  const visibleFieldIds = currentStep.fieldIds.filter((fieldId) => fieldId !== "sandboxResult");
 
   useEffect(() => {
     return () => {
@@ -292,24 +206,33 @@ export function ProposalForm({ issues, ruleSets, action, initial, intentLabel }:
     };
   }, []);
 
-  async function runAutosave() {
-    const form = formRef.current;
-    if (!form) {
+  useEffect(() => {
+    if (!stepSyncRef.current) {
+      stepSyncRef.current = true;
+      const requestedStep = resolveStep(currentStepQuery, assessment.firstIncompleteStepId);
+      setCurrentStepId(requestedStep);
       return;
     }
 
-    const snapshot = readMemoDraft(form);
-    setDraftSnapshot(snapshot);
-    const check = buildDraftCheck(snapshot, Boolean(sandboxResult));
-    setDraftCheck(check);
+    if (isProposalCoachStepId(currentStepQuery) && currentStepQuery !== currentStepId) {
+      setCurrentStepId(currentStepQuery);
+    }
+  }, [assessment.firstIncompleteStepId, currentStepId, currentStepQuery]);
 
-    if (!hasAnyDraftContent(snapshot) && !draftId) {
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (params.get("step") === currentStepId) {
       return;
     }
 
-    const payload = new FormData(form);
-    if (draftId) {
-      payload.set("proposalId", draftId);
+    params.set("step", currentStepId);
+    const nextUrl = `${pathname}?${params.toString()}`;
+    router.replace(nextUrl, { scroll: false });
+  }, [currentStepId, pathname, router, searchParams]);
+
+  const performAutosave = useCallback(async () => {
+    if (!hasAnyDraftContent(values, sandboxResult) && !draftId) {
+      return;
     }
 
     setAutosaveState({
@@ -320,7 +243,7 @@ export function ProposalForm({ issues, ruleSets, action, initial, intentLabel }:
     try {
       const response = await fetch("/api/studio/proposal-autosave", {
         method: "POST",
-        body: payload
+        body: buildProposalFormData(values, draftId, sandboxResult)
       });
       const result = await response.json();
 
@@ -345,37 +268,99 @@ export function ProposalForm({ issues, ruleSets, action, initial, intentLabel }:
         message: error instanceof Error ? error.message : "Autosave failed."
       });
     }
-  }
+  }, [draftId, initial?.id, router, sandboxResult, values]);
 
-  function scheduleAutosave() {
-    if (!formRef.current) {
+  useEffect(() => {
+    if (!autosaveReadyRef.current) {
+      autosaveReadyRef.current = true;
       return;
     }
-
-    const snapshot = readMemoDraft(formRef.current);
-    setDraftSnapshot(snapshot);
-    setDraftCheck(buildDraftCheck(snapshot, Boolean(sandboxResult)));
 
     if (autosaveTimerRef.current) {
       window.clearTimeout(autosaveTimerRef.current);
     }
 
     autosaveTimerRef.current = window.setTimeout(() => {
-      void runAutosave();
+      void performAutosave();
     }, 900);
+  }, [performAutosave]);
+
+  async function handleManualDraftSave() {
+    if (autosaveTimerRef.current) {
+      window.clearTimeout(autosaveTimerRef.current);
+    }
+
+    await performAutosave();
   }
 
-  const stepStatus = buildStepStatusItems(draftSnapshot, Boolean(sandboxResult));
+  function updateField(fieldId: Exclude<ProposalCoachFieldId, "sandboxResult">, value: string) {
+    setValues((current) => ({
+      ...current,
+      [fieldId]: value
+    }));
+  }
 
-  function runSandbox() {
-    const form = formRef.current;
-    if (!form) {
+  function insertStarter(fieldId: Exclude<ProposalCoachFieldId, "sandboxResult">, starter: string) {
+    setValues((current) => ({
+      ...current,
+      [fieldId]: applyStarter(current[fieldId], starter, fieldId)
+    }));
+  }
+
+  function focusFirstWeakField(stepId: ProposalCoachStepId) {
+    const targetField =
+      proposalCoachSteps[stepId].fieldIds.find((fieldId) => {
+        if (fieldId === "sandboxResult") {
+          return !assessment.fields.sandboxResult.complete;
+        }
+
+        return !assessment.fields[fieldId].complete;
+      }) ?? proposalCoachSteps[stepId].fieldIds[0];
+
+    const focusField = targetField === "sandboxResult" ? "diffJson" : targetField;
+    const element = document.getElementById(getProposalCoachDomId(focusField));
+    element?.focus();
+  }
+
+  function moveToStep(nextStepId: ProposalCoachStepId, withWarnings: boolean) {
+    const warningItems = withWarnings ? currentStepEvaluation.missingItems : [];
+    setCarryForwardWarnings(warningItems);
+    setCurrentStepId(nextStepId);
+    window.setTimeout(() => {
+      focusFirstWeakField(nextStepId);
+    }, 30);
+  }
+
+  function goBack() {
+    if (currentStepIndex <= 0) {
       return;
     }
 
-    const formData = new FormData(form);
-    const ruleSetId = String(formData.get("ruleSetId") ?? "");
-    const diffJson = String(formData.get("diffJson") ?? "");
+    setCarryForwardWarnings([]);
+    setCurrentStepId(proposalCoachStepOrder[currentStepIndex - 1]);
+  }
+
+  function goNext() {
+    const nextStepId = proposalCoachStepOrder[currentStepIndex + 1];
+    if (!nextStepId) {
+      return;
+    }
+
+    moveToStep(nextStepId, currentStepEvaluation.missingItems.length > 0);
+  }
+
+  function selectFromRail(stepId: ProposalCoachStepId) {
+    const targetIndex = proposalCoachStepOrder.indexOf(stepId);
+    if (targetIndex > currentStepIndex && !assessment.steps[stepId].complete) {
+      return;
+    }
+
+    setCarryForwardWarnings([]);
+    setCurrentStepId(stepId);
+  }
+
+  function runSandbox() {
+    const currentFingerprint = getSandboxFingerprint(values.ruleSetId, values.diffJson);
 
     startTransition(async () => {
       try {
@@ -386,422 +371,279 @@ export function ProposalForm({ issues, ruleSets, action, initial, intentLabel }:
             "Content-Type": "application/json"
           },
           body: JSON.stringify({
-            ruleSetId,
-            diff: JSON.parse(diffJson)
+            ruleSetId: values.ruleSetId,
+            diff: JSON.parse(values.diffJson)
           })
         });
 
         const payload = await response.json();
+
         if (!response.ok) {
           throw new Error(payload.error ?? "Sandbox run failed.");
         }
 
         setSandboxResult(payload);
-        setDraftCheck((current) => ({
-          ...current,
-          caution: current.caution.filter((line) => line !== "Run the sandbox so this memo includes model evidence.")
-        }));
-        scheduleAutosave();
+        setSandboxRunFingerprint(currentFingerprint);
       } catch (error) {
-        setSandboxResult(null);
         setSandboxError(error instanceof Error ? error.message : "Sandbox run failed.");
       }
     });
   }
 
-  return (
-    <form
-      ref={formRef}
-      action={action}
-      className="space-y-6"
-      onInput={scheduleAutosave}
-      onChange={scheduleAutosave}
-    >
-      <input type="hidden" name="proposalId" value={draftId} readOnly />
+  function renderHiddenFields() {
+    const activeFieldNames = new Set(visibleFieldIds.map((fieldId) => fieldNameById[fieldId]));
 
-      <section className="panel p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="font-mono text-xs uppercase tracking-[0.22em] text-accent">Studio progress</p>
-            <h3 className="mt-3 font-display text-2xl text-ink">Live memo check</h3>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-ink/68">
-              This panel updates while you write. It shows what is already strong, what still needs
-              revision, and whether the draft is saving in the background.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-line bg-white/70 px-4 py-3 text-sm text-ink/70">
-            {draftCheck.completeCount} of {draftCheck.totalCount} core parts in place
-          </div>
-        </div>
-
-        <div className="mt-5 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">
-          <div className="rounded-2xl border border-line bg-white/60 p-4">
-            <p className="font-medium text-ink">Autosave</p>
-            <p
-              className={`mt-3 text-sm ${
-                autosaveState.tone === "error"
-                  ? "text-danger"
-                  : autosaveState.tone === "saved"
-                    ? "text-success"
-                    : "text-ink/68"
-              }`}
-            >
-              {autosaveState.message}
-            </p>
-          </div>
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-2xl border border-line bg-white/60 p-4">
-              <p className="font-medium text-ink">Still missing</p>
-              <ul className="mt-3 space-y-2 text-sm leading-6 text-ink/68">
-                {draftCheck.critical.length > 0 ? (
-                  draftCheck.critical.map((line) => (
-                    <li key={line} className="rounded-2xl border border-line bg-white/70 px-4 py-3">
-                      {line}
-                    </li>
-                  ))
-                ) : (
-                  <li className="rounded-2xl border border-line bg-white/70 px-4 py-3">
-                    Core memo sections look complete.
-                  </li>
-                )}
-              </ul>
-            </div>
-            <div className="rounded-2xl border border-line bg-white/60 p-4">
-              <p className="font-medium text-ink">Needs smoothing</p>
-              <ul className="mt-3 space-y-2 text-sm leading-6 text-ink/68">
-                {draftCheck.caution.length > 0 ? (
-                  draftCheck.caution.map((line) => (
-                    <li key={line} className="rounded-2xl border border-line bg-white/70 px-4 py-3">
-                      {line}
-                    </li>
-                  ))
-                ) : (
-                  <li className="rounded-2xl border border-line bg-white/70 px-4 py-3">
-                    No extra cautions right now.
-                  </li>
-                )}
-              </ul>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="panel p-6">
-        <p className="font-mono text-xs uppercase tracking-[0.22em] text-accent">Step 1</p>
-        <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h3 className="font-display text-2xl text-ink">Choose the issue and policy target</h3>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-ink/68">
-              Start with the league problem. Then connect your memo to the active RuleSet so
-              your reform has a clear baseline.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-line bg-white/70 px-4 py-3 text-sm text-ink/70">
-            Final output: <span className="font-medium text-ink">{publicationTypeLabels.POLICY_MEMO}</span>
-          </div>
-        </div>
-
-        <div className="mt-5 grid gap-4 md:grid-cols-2">
-          <input
-            name="title"
-            defaultValue={initial?.title ?? ""}
-            placeholder="Policy memo title"
-            className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-          />
-          <select
-            name="issueId"
-            defaultValue={initial?.issueId ?? ""}
-            className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-          >
-            <option value="">Choose issue</option>
-            {issues.map((issue) => (
-              <option key={issue.id} value={issue.id}>
-                {issue.title}
-                {issue.team ? ` · ${issue.team.name}` : ""}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <select
-          name="ruleSetId"
-          defaultValue={initial?.ruleSetId ?? ruleSets[0]?.id ?? ""}
-          className="mt-4 w-full rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-        >
-          {ruleSets.map((ruleSet) => (
-            <option key={ruleSet.id} value={ruleSet.id}>
-              RuleSet v{ruleSet.version}
-            </option>
-          ))}
-        </select>
-      </section>
-
-      <section className="panel p-6">
-        <p className="font-mono text-xs uppercase tracking-[0.22em] text-accent">Step 2</p>
-        <h3 className="mt-3 font-display text-2xl text-ink">Write the memo opening</h3>
-        <div className="mt-5 grid gap-4">
-          <textarea
-            name="abstract"
-            defaultValue={initial?.abstract ?? ""}
-            rows={4}
-            placeholder="Executive summary: explain the problem, your reform idea, and what you expect to change."
-            className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-          />
-          <textarea
-            name="methodsSummary"
-            defaultValue={initial?.methodsSummary ?? ""}
-            rows={3}
-            placeholder="Methods summary: how are you studying this proposal?"
-            className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-          />
-          <input
-            name="publicationSlug"
-            defaultValue={initial?.publicationSlug ?? ""}
-            placeholder="Optional publication slug"
-            className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-          />
-        </div>
-
-        <div className="mt-6 grid gap-3 md:grid-cols-2">
-          {stepStatus.opening.map((item) => (
-            <div key={item.label} className="rounded-2xl border border-line bg-white/55 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <p className="font-medium text-ink">{item.label}</p>
-                <span className={`rounded-full border px-3 py-1 font-mono text-[11px] uppercase tracking-[0.2em] ${statusTone(item.ready)}`}>
-                  {item.ready ? "Ready" : "Keep writing"}
-                </span>
-              </div>
-              <p className="mt-3 text-sm leading-6 text-ink/66">{item.detail}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="panel p-6">
-        <p className="font-mono text-xs uppercase tracking-[0.22em] text-accent">Step 3</p>
-        <h3 className="mt-3 font-display text-2xl text-ink">Build the policy memo body</h3>
-        <div className="mt-5 grid gap-4">
-          <textarea
-            name="problem"
-            defaultValue={initial?.problem ?? fieldValue(null, "problem")}
-            rows={4}
-            placeholder="Problem: what is going wrong in the league?"
-            className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-          />
-          <textarea
-            name="currentRuleContext"
-            defaultValue={initial?.currentRuleContext ?? ""}
-            rows={4}
-            placeholder="Current rule context: what does the league do now?"
-            className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-          />
-          <textarea
-            name="proposedChange"
-            defaultValue={initial?.proposedChange ?? ""}
-            rows={4}
-            placeholder="Proposed change: what should the rule become?"
-            className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-          />
-          <textarea
-            name="expectedImpact"
-            defaultValue={initial?.impactAnalysis ?? ""}
-            rows={4}
-            placeholder="Impact analysis: who benefits, who loses flexibility, and why?"
-            className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-          />
-          <textarea
-            name="tradeoffs"
-            defaultValue={initial?.tradeoffs ?? ""}
-            rows={4}
-            placeholder="Tradeoffs: what new pressure might this reform create?"
-            className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-          />
-          <textarea
-            name="recommendation"
-            defaultValue={initial?.recommendation ?? ""}
-            rows={4}
-            placeholder="Recommendation: what should the commissioner or league do next?"
-            className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-          />
-        </div>
-
-        <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {stepStatus.memoBody.map((item) => (
-            <div key={item.label} className="rounded-2xl border border-line bg-white/55 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <p className="font-medium text-ink">{item.label}</p>
-                <span className={`rounded-full border px-3 py-1 font-mono text-[11px] uppercase tracking-[0.2em] ${statusTone(item.ready)}`}>
-                  {item.ready ? "Ready" : "Needs work"}
-                </span>
-              </div>
-              <p className="mt-3 text-sm leading-6 text-ink/66">{item.detail}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="panel p-6">
-        <p className="font-mono text-xs uppercase tracking-[0.22em] text-accent">Step 4</p>
-        <h3 className="mt-3 font-display text-2xl text-ink">Add the rule diff and sandbox</h3>
-        <textarea
-          name="diffJson"
-          rows={10}
-          defaultValue={
-            initial?.diffJson ??
-            `{\n  "changes": [\n    {\n      "op": "replace",\n      "path": "/revenueSharingRate",\n      "value": 0.16,\n      "reason": "Raise the league sharing pool slightly."\n    }\n  ]\n}`
-          }
-          className="mt-5 w-full rounded-2xl border border-line bg-white/80 px-4 py-3 font-mono text-sm text-ink outline-none focus:border-accent"
+    return (
+      <>
+        {(
+          Object.entries(fieldNameById) as Array<[Exclude<ProposalCoachFieldId, "sandboxResult">, string]>
+        ).map(([fieldId, name]) =>
+          activeFieldNames.has(name) ? null : (
+            <input key={fieldId} type="hidden" name={name} value={values[fieldId]} readOnly />
+          )
+        )}
+        <input
+          type="hidden"
+          name="proposalId"
+          value={draftId}
+          readOnly
         />
-
         <input
           type="hidden"
           name="sandboxResultJson"
           value={sandboxResult ? JSON.stringify(sandboxResult) : ""}
           readOnly
         />
+      </>
+    );
+  }
 
-        <div className="mt-5 flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={runSandbox}
-            disabled={isPending}
-            className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm font-semibold text-ink"
-          >
-            {isPending ? "Running sandbox..." : "Run sandbox model"}
-          </button>
-          <div className="rounded-2xl border border-line bg-white/60 px-4 py-3 text-sm text-ink/70">
-            Use the sandbox before submitting so the memo includes evidence, not just an idea.
-          </div>
-        </div>
+  const railItems = proposalCoachStepOrder.map((stepId, index) => ({
+    id: stepId,
+    title: proposalCoachSteps[stepId].title,
+    shortTitle: proposalCoachSteps[stepId].shortTitle,
+    status: assessment.steps[stepId].status,
+    current: currentStepId === stepId,
+    disabled: index > currentStepIndex && !assessment.steps[stepId].complete
+  }));
 
-        {sandboxError ? (
-          <p className="mt-4 rounded-2xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger">
-            {sandboxError}
-          </p>
-        ) : null}
-
-        <div className="mt-5 rounded-2xl border border-line bg-white/55 p-4">
-          <p className="font-medium text-ink">Sandbox impact report</p>
-          {sandboxResult ? (
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <div className="rounded-2xl border border-line bg-white/70 p-4">
-                <p className="text-sm text-ink/60">Parity delta</p>
-                <p className="mt-2 font-display text-3xl text-ink">{sandboxResult.delta.parityIndex}</p>
-              </div>
-              <div className="rounded-2xl border border-line bg-white/70 p-4">
-                <p className="text-sm text-ink/60">Tax concentration delta</p>
-                <p className="mt-2 font-display text-3xl text-ink">{sandboxResult.delta.taxConcentration}</p>
-              </div>
-              <div className="rounded-2xl border border-line bg-white/70 p-4">
-                <p className="text-sm text-ink/60">Small vs big delta</p>
-                <p className="mt-2 font-display text-3xl text-ink">
-                  {sandboxResult.delta.smallVsBigCompetitiveness}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-line bg-white/70 p-4">
-                <p className="text-sm text-ink/60">Revenue inequality delta</p>
-                <p className="mt-2 font-display text-3xl text-ink">{sandboxResult.delta.revenueInequality}</p>
-              </div>
-            </div>
-          ) : (
-            <p className="mt-3 text-sm leading-6 text-ink/68">
-              Run the sandbox to compare the baseline rules against your proposed rule diff.
-            </p>
-          )}
-        </div>
-
-        <textarea
-          name="sandboxInterpretation"
-          defaultValue={initial?.sandboxInterpretation ?? ""}
-          rows={4}
-          placeholder="Sandbox interpretation: what do these results mean for the league?"
-          className="mt-4 w-full rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-        />
-
-        <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-          {stepStatus.modelReadiness.map((item) => (
-            <div key={item.label} className="rounded-2xl border border-line bg-white/55 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <p className="font-medium text-ink">{item.label}</p>
-                <span className={`rounded-full border px-3 py-1 font-mono text-[11px] uppercase tracking-[0.2em] ${statusTone(item.ready)}`}>
-                  {item.ready ? "Ready" : "Needed"}
-                </span>
-              </div>
-              <p className="mt-3 text-sm leading-6 text-ink/66">{item.detail}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="panel p-6">
-        <p className="font-mono text-xs uppercase tracking-[0.22em] text-accent">Step 5</p>
-        <h3 className="mt-3 font-display text-2xl text-ink">Add references and publication details</h3>
-        <div className="mt-5 grid gap-4">
-          <textarea
-            name="references"
-            rows={4}
-            defaultValue={initial?.referencesText ?? ""}
-            placeholder="References, one per line: Label | https://... | DATASET | note"
-            className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
+  function renderCurrentStep() {
+    switch (currentStepId) {
+      case "issue":
+        return (
+          <ProposalStepIssue
+            step={currentStep}
+            evaluation={currentStepEvaluation}
+            fieldEvaluation={assessment.fields.issueId}
+            value={values.issueId}
+            issues={issues}
+            onChange={(value) => updateField("issueId", value)}
+            warningItems={carryForwardWarnings}
           />
-          <input
-            name="keywords"
-            defaultValue={initial?.keywordsText ?? ""}
-            placeholder="Keywords separated by commas"
-            className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
+        );
+      case "ruleset":
+        return (
+          <ProposalStepRuleset
+            step={currentStep}
+            evaluation={currentStepEvaluation}
+            fieldEvaluation={assessment.fields.ruleSetId}
+            value={values.ruleSetId}
+            ruleSets={ruleSets}
+            onChange={(value) => updateField("ruleSetId", value)}
+            warningItems={carryForwardWarnings}
           />
-          <textarea
-            name="keyTakeaways"
-            rows={4}
-            defaultValue={initial?.keyTakeawaysText ?? ""}
-            placeholder="Key takeaways, one per line"
-            className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
+        );
+      case "title":
+        return (
+          <ProposalStepTitle
+            step={currentStep}
+            evaluation={currentStepEvaluation}
+            fieldEvaluation={assessment.fields.title}
+            value={values.title}
+            onChange={(value) => updateField("title", value)}
+            onUseStarter={(starter) => insertStarter("title", starter)}
+            warningItems={carryForwardWarnings}
           />
-        </div>
-      </section>
+        );
+      case "abstract":
+        return (
+          <ProposalStepAbstract
+            step={currentStep}
+            evaluation={currentStepEvaluation}
+            fieldEvaluation={assessment.fields.abstract}
+            value={values.abstract}
+            onChange={(value) => updateField("abstract", value)}
+            onUseStarter={(starter) => insertStarter("abstract", starter)}
+            warningItems={carryForwardWarnings}
+          />
+        );
+      case "problem":
+        return (
+          <ProposalStepProblem
+            step={currentStep}
+            evaluation={currentStepEvaluation}
+            fieldEvaluation={assessment.fields.problem}
+            value={values.problem}
+            onChange={(value) => updateField("problem", value)}
+            onUseStarter={(starter) => insertStarter("problem", starter)}
+            warningItems={carryForwardWarnings}
+          />
+        );
+      case "currentRule":
+        return (
+          <ProposalStepCurrentRule
+            step={currentStep}
+            evaluation={currentStepEvaluation}
+            fieldEvaluation={assessment.fields.currentRuleContext}
+            value={values.currentRuleContext}
+            onChange={(value) => updateField("currentRuleContext", value)}
+            onUseStarter={(starter) => insertStarter("currentRuleContext", starter)}
+            warningItems={carryForwardWarnings}
+          />
+        );
+      case "reform":
+        return (
+          <ProposalStepReform
+            step={currentStep}
+            evaluation={currentStepEvaluation}
+            fieldEvaluation={assessment.fields.proposedChange}
+            value={values.proposedChange}
+            onChange={(value) => updateField("proposedChange", value)}
+            onUseStarter={(starter) => insertStarter("proposedChange", starter)}
+            warningItems={carryForwardWarnings}
+          />
+        );
+      case "impact":
+        return (
+          <ProposalStepImpact
+            step={currentStep}
+            evaluation={currentStepEvaluation}
+            fieldEvaluation={assessment.fields.expectedImpact}
+            value={values.expectedImpact}
+            onChange={(value) => updateField("expectedImpact", value)}
+            onUseStarter={(starter) => insertStarter("expectedImpact", starter)}
+            warningItems={carryForwardWarnings}
+          />
+        );
+      case "tradeoffs":
+        return (
+          <ProposalStepTradeoffs
+            step={currentStep}
+            evaluation={currentStepEvaluation}
+            fieldEvaluation={assessment.fields.tradeoffs}
+            value={values.tradeoffs}
+            onChange={(value) => updateField("tradeoffs", value)}
+            onUseStarter={(starter) => insertStarter("tradeoffs", starter)}
+            warningItems={carryForwardWarnings}
+          />
+        );
+      case "action":
+        return (
+          <ProposalStepAction
+            step={currentStep}
+            evaluation={currentStepEvaluation}
+            recommendationEvaluation={assessment.fields.recommendation}
+            methodsEvaluation={assessment.fields.methodsSummary}
+            recommendation={values.recommendation}
+            methodsSummary={values.methodsSummary}
+            onChangeRecommendation={(value) => updateField("recommendation", value)}
+            onChangeMethods={(value) => updateField("methodsSummary", value)}
+            onUseRecommendationStarter={(starter) => insertStarter("recommendation", starter)}
+            onUseMethodsStarter={(starter) => insertStarter("methodsSummary", starter)}
+            warningItems={carryForwardWarnings}
+          />
+        );
+      case "sandbox":
+        return (
+          <ProposalStepSandbox
+            step={currentStep}
+            evaluation={currentStepEvaluation}
+            diffEvaluation={assessment.fields.diffJson}
+            sandboxEvaluation={assessment.fields.sandboxResult}
+            interpretationEvaluation={assessment.fields.sandboxInterpretation}
+            diffJson={values.diffJson}
+            sandboxInterpretation={values.sandboxInterpretation}
+            sandboxResult={sandboxResult}
+            sandboxFreshness={assessment.sandboxFreshness}
+            sandboxError={sandboxError}
+            isPending={isPending}
+            diffError={assessment.diffError}
+            onChangeDiff={(value) => updateField("diffJson", value)}
+            onChangeInterpretation={(value) => updateField("sandboxInterpretation", value)}
+            onUseDiffStarter={(starter) => insertStarter("diffJson", starter)}
+            onUseInterpretationStarter={(starter) => insertStarter("sandboxInterpretation", starter)}
+            onRunSandbox={runSandbox}
+            warningItems={carryForwardWarnings}
+          />
+        );
+      case "review":
+        return (
+          <ProposalStepReview
+            step={currentStep}
+            evaluation={currentStepEvaluation}
+            referencesEvaluation={assessment.fields.references}
+            keywordsEvaluation={assessment.fields.keywords}
+            takeawaysEvaluation={assessment.fields.keyTakeaways}
+            slugEvaluation={assessment.fields.publicationSlug}
+            references={values.references}
+            keywords={values.keywords}
+            keyTakeaways={values.keyTakeaways}
+            publicationSlug={values.publicationSlug}
+            blockers={assessment.reviewBuckets.blockers}
+            polish={assessment.reviewBuckets.polish}
+            strengths={assessment.reviewBuckets.strengths}
+            onChangeReferences={(value) => updateField("references", value)}
+            onChangeKeywords={(value) => updateField("keywords", value)}
+            onChangeTakeaways={(value) => updateField("keyTakeaways", value)}
+            onChangeSlug={(value) => updateField("publicationSlug", value)}
+            onUseReferencesStarter={(starter) => insertStarter("references", starter)}
+            onUseKeywordsStarter={(starter) => insertStarter("keywords", starter)}
+            onUseTakeawaysStarter={(starter) => insertStarter("keyTakeaways", starter)}
+            onUseSlugStarter={(starter) => insertStarter("publicationSlug", starter)}
+            warningItems={carryForwardWarnings}
+          />
+        );
+    }
+  }
 
-      <section className="panel p-6">
-        <p className="font-mono text-xs uppercase tracking-[0.22em] text-accent">Step 6</p>
-        <h3 className="mt-3 font-display text-2xl text-ink">Review before you submit</h3>
-        <div className="mt-5 grid gap-4 lg:grid-cols-2">
-          <div className="rounded-2xl border border-line bg-white/60 p-4">
-            <p className="font-medium text-ink">Strong policy memos usually include</p>
-            <ul className="mt-3 space-y-2 text-sm leading-6 text-ink/68">
-              <li className="rounded-2xl border border-line bg-white/70 px-4 py-3">A clear problem statement tied to a live issue.</li>
-              <li className="rounded-2xl border border-line bg-white/70 px-4 py-3">A concrete rule change, not only a complaint.</li>
-              <li className="rounded-2xl border border-line bg-white/70 px-4 py-3">An interpretation of the sandbox results.</li>
-              <li className="rounded-2xl border border-line bg-white/70 px-4 py-3">Tradeoffs and references that an outside reader can follow.</li>
-            </ul>
-          </div>
-          <div className="rounded-2xl border border-line bg-white/60 p-4">
-            <p className="font-medium text-ink">External publication checks</p>
-            <ul className="mt-3 space-y-2 text-sm leading-6 text-ink/68">
-              <li className="rounded-2xl border border-line bg-white/70 px-4 py-3">The title and abstract should still make sense outside the classroom.</li>
-              <li className="rounded-2xl border border-line bg-white/70 px-4 py-3">The memo should define BOW-specific ideas the first time they appear.</li>
-              <li className="rounded-2xl border border-line bg-white/70 px-4 py-3">The recommendation and references should be clean enough for a web article or PDF later.</li>
-            </ul>
-          </div>
-        </div>
+  return (
+    <form
+      action={action}
+      className="space-y-6"
+      onSubmit={(event) => {
+        if (currentStepId !== "review" || !assessment.submitReady) {
+          event.preventDefault();
+        }
+      }}
+    >
+      {renderHiddenFields()}
 
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
-          <button
-            type="submit"
-            name="intent"
-            value="DRAFT"
-            className="rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm font-semibold text-ink"
-          >
-            Save draft
-          </button>
-          <button
-            type="submit"
-            name="intent"
-            value="SUBMITTED"
-            className="rounded-2xl border border-accent bg-accent px-4 py-3 text-sm font-semibold text-white"
-          >
-            {intentLabel}
-          </button>
-        </div>
-      </section>
+      <WizardShell
+        progressTitle="Adaptive proposal coach"
+        progressDescription="This wizard breaks the memo into tiny decisions, shows what strong work looks like, and blocks submission until the proposal is clear, evidence-backed, and ready for review."
+        autosaveMessage={autosaveState.message}
+        autosaveTone={autosaveState.tone}
+        completedSteps={completedSteps}
+        totalSteps={proposalCoachStepOrder.length}
+        rail={<WizardStepRail items={railItems} onSelect={selectFromRail} />}
+        footer={
+          <WizardFooter
+            currentStepNumber={currentStepIndex + 1}
+            totalSteps={proposalCoachStepOrder.length}
+            nextMove={currentStepEvaluation.nextMove}
+            canGoBack={currentStepIndex > 0}
+            canGoNext={currentStepIndex < proposalCoachStepOrder.length - 1}
+            onSaveDraft={handleManualDraftSave}
+            onBack={goBack}
+            onNext={goNext}
+            submitReady={assessment.submitReady}
+            reviewMode={currentStepId === "review"}
+            submitLabel={intentLabel}
+          />
+        }
+      >
+        {renderCurrentStep()}
+      </WizardShell>
     </form>
   );
 }
