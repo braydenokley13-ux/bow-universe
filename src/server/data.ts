@@ -1,4 +1,4 @@
-import { IssueStatus, Prisma, ProjectType, ProposalStatus, PublicationSourceType } from "@prisma/client";
+import { IssueStatus, Prisma, ProjectType, ProposalStatus, PublicationSourceType, SubmissionStatus } from "@prisma/client";
 
 import {
   getPrimaryLaneTag,
@@ -746,4 +746,33 @@ export function parseProposalJson(proposal: {
 
 export function formatProposalStatus(status: ProposalStatus) {
   return status.replace("_", " ");
+}
+
+export async function getStudentDashboardData(userId: string) {
+  const OPEN_PROJECT_STATUSES: SubmissionStatus[] = [
+    SubmissionStatus.DRAFT,
+    SubmissionStatus.SUBMITTED,
+    SubmissionStatus.REVISION_REQUESTED,
+    SubmissionStatus.APPROVED_FOR_INTERNAL_PUBLICATION
+  ];
+  const OPEN_PROPOSAL_STATUSES: ProposalStatus[] = [
+    ProposalStatus.DRAFT,
+    ProposalStatus.SUBMITTED,
+    ProposalStatus.REVISION_REQUESTED
+  ];
+
+  const [openProjects, openProposals] = await Promise.all([
+    prisma.project.findMany({
+      where: { createdByUserId: userId, submissionStatus: { in: OPEN_PROJECT_STATUSES } },
+      select: { id: true, title: true, submissionStatus: true, lanePrimary: true, updatedAt: true },
+      orderBy: { updatedAt: "desc" }
+    }),
+    prisma.proposal.findMany({
+      where: { createdByUserId: userId, status: { in: OPEN_PROPOSAL_STATUSES } },
+      select: { id: true, title: true, status: true, updatedAt: true },
+      orderBy: { updatedAt: "desc" }
+    })
+  ]);
+
+  return { openProjects, openProposals };
 }

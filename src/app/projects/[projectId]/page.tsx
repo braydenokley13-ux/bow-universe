@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 
 import { Badge } from "@/components/badge";
+import { Breadcrumb } from "@/components/breadcrumb";
 import { PrintButton } from "@/components/print-button";
 import { ReviewSidebar } from "@/components/review-sidebar";
 import { SectionHeading } from "@/components/section-heading";
@@ -40,6 +41,7 @@ export default async function ProjectDetailPage({ params }: { params: { projectI
 
   return (
     <div className="space-y-8 print-publication">
+      <Breadcrumb items={[{ label: "Home", href: "/" }, { label: "Projects", href: "/projects" }, { label: project.title.length > 40 ? project.title.slice(0, 40) + "…" : project.title }]} />
       <SectionHeading
         eyebrow="Project Publication"
         title={project.title}

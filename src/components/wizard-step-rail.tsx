@@ -38,7 +38,7 @@ export function WizardStepRail<StepId extends string>({
 }: WizardStepRailProps<StepId>) {
   return (
     <nav className="rounded-[28px] border border-line bg-panel/85 p-4 shadow-panel">
-      <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Coach path</p>
+      <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Your progress</p>
       <div className="mt-4 space-y-2">
         {items.map((item, index) => (
           <button
@@ -50,14 +50,18 @@ export function WizardStepRail<StepId extends string>({
               item.disabled ? "cursor-not-allowed opacity-55" : "hover:border-accent"
             }`}
           >
-            <span className="font-mono text-[11px] uppercase tracking-[0.2em]">
+            <span className="mt-0.5 flex-shrink-0 rounded-full border border-current/30 bg-current/10 px-1.5 py-0.5 font-mono text-[10px] leading-none">
               {String(index + 1).padStart(2, "0")}
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block font-medium">{item.title}</span>
-              <span className="mt-1 block text-xs leading-5 opacity-80">
-                {getStepStatusLabel(item.status)}
-              </span>
+              <span className="block text-sm font-semibold leading-5">{item.title}</span>
+              {item.current ? (
+                <span className="mt-1 block text-xs leading-5 font-medium">→ You are here</span>
+              ) : (
+                <span className="mt-1 block text-xs leading-5 opacity-80">
+                  {getStepStatusLabel(item.status)}
+                </span>
+              )}
             </span>
           </button>
         ))}

@@ -577,6 +577,15 @@ async function saveProposalRecord(params: {
   };
 }
 
+export async function completeOnboardingAction() {
+  const viewer = await requireUser();
+  await prisma.user.update({
+    where: { id: viewer.id },
+    data: { onboardingCompletedAt: new Date() }
+  });
+  revalidatePath("/");
+}
+
 export async function createProjectAction(formData: FormData) {
   const viewer = await requireUser();
   const projectId = String(formData.get("projectId") ?? "").trim() || undefined;
