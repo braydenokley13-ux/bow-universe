@@ -761,6 +761,7 @@ export function ProjectStudioForm({
         autosaveTone={autosaveState.tone}
         completedSteps={completedSteps}
         totalSteps={projectCoachStepOrder.length}
+        currentStepName={currentStep.shortTitle}
         rail={<WizardStepRail items={railItems} onSelect={selectFromRail} />}
         footer={
           <WizardFooter
