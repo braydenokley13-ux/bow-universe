@@ -110,6 +110,28 @@ export default async function ProjectsPage() {
           </div>
 
           <div className="mt-6 space-y-4">
+            {openStudioWork.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-line p-8 text-center">
+                <p className="font-display text-2xl text-ink">No research in progress yet.</p>
+                <p className="mt-3 text-sm leading-6 text-ink/68">
+                  Pick a lane above to start your first project. Your draft will appear here as soon as you save it.
+                </p>
+                <div className="mt-5 flex flex-wrap justify-center gap-3">
+                  <Link
+                    href="/projects/new"
+                    className="rounded-full border border-accent bg-accent px-4 py-2 text-sm font-medium text-white"
+                  >
+                    Start your first project
+                  </Link>
+                  <Link
+                    href="/issues"
+                    className="rounded-full border border-line bg-white/70 px-4 py-2 text-sm font-medium text-ink"
+                  >
+                    Browse open issues
+                  </Link>
+                </div>
+              </div>
+            ) : null}
             {openStudioWork.map((project) => {
               const parsed = parseProjectJson(project);
 

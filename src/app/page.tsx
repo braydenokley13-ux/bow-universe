@@ -5,8 +5,8 @@ import { MetricCard } from "@/components/metric-card";
 import { OnboardingWizard } from "@/components/onboarding-wizard";
 import { SectionHeading } from "@/components/section-heading";
 import { StudentDashboard } from "@/components/student-dashboard";
-import { prisma } from "@/lib/prisma";
 import { buildDashboardGuidance } from "@/lib/discovery-guidance";
+import { prisma } from "@/lib/prisma";
 import { formatCompactCurrency } from "@/lib/utils";
 import { advanceSeasonAction } from "@/server/actions";
 import { getViewer } from "@/server/auth";
@@ -31,9 +31,9 @@ function eventHref(entityType: string | null, entityId: string | null) {
 export default async function HomePage() {
   const viewer = await getViewer();
 
-  // Unauthenticated: minimal public view
   if (!viewer) {
     const { currentSeason, metrics } = await getDashboardData();
+
     return (
       <div className="space-y-8">
         <SectionHeading
@@ -41,12 +41,14 @@ export default async function HomePage() {
           title="BOW League Research Terminal"
           description="A persistent fictional sports-economy league for grades 5 to 8. Sign in to start research, write proposals, and publish your work."
         />
+
         <section className="metric-grid">
           <MetricCard label="Active Ruleset" value={`v${currentSeason?.activeRuleSet.version ?? "-"}`} detail="The baseline rule environment that current proposals are testing against." />
           <MetricCard label="Season" value={String(currentSeason?.year ?? "-")} detail="The live season controls which team snapshots and rule context the app is reading." />
           <MetricCard label="Parity Index" value={metrics.parityIndex.toFixed(1)} detail="A lower value means team strength is clustering more tightly across the league." />
           <MetricCard label="Revenue Inequality" value={metrics.revenueInequality.toFixed(2)} detail="A higher value means the league still has a wider gap between top and bottom clubs." />
         </section>
+
         <div className="panel p-8 text-center">
           <p className="font-display text-2xl text-ink">Sign in to start researching</p>
           <p className="mt-3 text-sm leading-6 text-ink/70">Pick a research lane, work through the league&apos;s problems, and publish your findings.</p>
@@ -56,16 +58,20 @@ export default async function HomePage() {
     );
   }
 
-  // Authenticated student
   if (viewer.role === "STUDENT") {
     const [userRecord, { openProjects, openProposals }, league] = await Promise.all([
-      prisma.user.findUnique({ where: { id: viewer.id }, select: { onboardingCompletedAt: true } }),
+      prisma.user.findUnique({
+        where: { id: viewer.id },
+        select: { onboardingCompletedAt: true }
+      }),
       getStudentDashboardData(viewer.id),
       getDashboardData()
     ]);
 
     const isFirstTime =
-      !userRecord?.onboardingCompletedAt && openProjects.length === 0 && openProposals.length === 0;
+      !userRecord?.onboardingCompletedAt &&
+      openProjects.length === 0 &&
+      openProposals.length === 0;
 
     if (isFirstTime) {
       return <OnboardingWizard />;
@@ -81,7 +87,6 @@ export default async function HomePage() {
     );
   }
 
-  // Admin: unchanged full dashboard
   const [
     { currentSeason, metrics, activity, latestTeamSeasons },
     { projects },
@@ -130,6 +135,7 @@ export default async function HomePage() {
             </div>
             <Badge>{guidance.attentionCards.length}</Badge>
           </div>
+
           <div className="mt-6 grid gap-4">
             {guidance.attentionCards.map((card) => (
               <Link key={`${card.eyebrow}-${card.title}`} href={card.href} className="rounded-2xl border border-line bg-white/65 p-4 hover:border-accent">
@@ -149,6 +155,7 @@ export default async function HomePage() {
             </div>
             <Badge>{guidance.nextMoveCards.length}</Badge>
           </div>
+
           <div className="mt-6 space-y-4">
             {guidance.nextMoveCards.map((card) => (
               <Link key={`${card.eyebrow}-${card.title}`} href={card.href} className="block rounded-2xl border border-line bg-white/65 p-4 hover:border-accent">
@@ -173,7 +180,7 @@ export default async function HomePage() {
             <Badge tone="warn">Current season snapshot</Badge>
           </div>
 
-          <div className="mt-6 grid gap-4 md:grid-cols-3">
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 md:grid-cols-3">
             <div className="rounded-2xl border border-line bg-white/60 p-4">
               <p className="font-mono text-xs uppercase tracking-[0.22em] text-accent">Tax concentration</p>
               <p className="mt-3 font-display text-3xl text-ink">{metrics.taxConcentration.toFixed(2)}</p>
@@ -195,9 +202,13 @@ export default async function HomePage() {
             <Link href="/proposals/new" className="rounded-full border border-accent bg-accent px-4 py-2 text-sm font-medium text-white">Draft proposal</Link>
             <Link href="/projects/new" className="rounded-full border border-line bg-white/70 px-4 py-2 text-sm font-medium text-ink">Start project</Link>
             <Link href="/research" className="rounded-full border border-line bg-white/70 px-4 py-2 text-sm font-medium text-ink">Research archive</Link>
-            <form action={advanceSeasonAction}>
-              <button type="submit" className="rounded-full border border-line bg-white/70 px-4 py-2 text-sm font-medium text-ink">Advance season</button>
-            </form>
+            {viewer.role === "ADMIN" ? (
+              <form action={advanceSeasonAction}>
+                <button type="submit" className="rounded-full border border-line bg-white/70 px-4 py-2 text-sm font-medium text-ink">
+                  Advance season
+                </button>
+              </form>
+            ) : null}
           </div>
         </article>
 
@@ -206,6 +217,7 @@ export default async function HomePage() {
           <p className="mt-2 text-sm leading-6 text-ink/70">
             These clubs are currently carrying the biggest share of the league&apos;s tax burden, so they are often a good place to look for stress in the rules.
           </p>
+
           <div className="mt-6 space-y-3">
             {topTaxTeams.map((teamSeason, index) => (
               <Link key={teamSeason.id} href={`/teams/${teamSeason.team.id}`} className="flex items-center justify-between rounded-2xl border border-line bg-white/60 p-4 hover:border-accent">
@@ -234,18 +246,40 @@ export default async function HomePage() {
           </div>
           <Badge>Archive feed</Badge>
         </div>
+
         <div className="mt-6 space-y-4">
-          {activity.map((event) => (
-            <Link key={event.id} href={eventHref(event.entityType, event.entityId)} className="block rounded-2xl border border-line bg-white/55 p-4 hover:border-accent">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="font-medium text-ink">{event.title}</p>
-                <p className="font-mono text-xs uppercase tracking-[0.2em] text-ink/55">
-                  {new Date(event.createdAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
-                </p>
+          {activity.length > 0 ? (
+            activity.map((event) => (
+              <Link key={event.id} href={eventHref(event.entityType, event.entityId)} className="block rounded-2xl border border-line bg-white/55 p-4 hover:border-accent">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="font-medium text-ink">{event.title}</p>
+                  <p className="font-mono text-xs uppercase tracking-[0.2em] text-ink/55">
+                    {new Date(event.createdAt).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric"
+                    })}
+                  </p>
+                </div>
+                <p className="mt-2 text-sm leading-6 text-ink/68">{event.summary}</p>
+              </Link>
+            ))
+          ) : (
+            <div className="rounded-2xl border border-dashed border-line p-6 text-center">
+              <p className="font-display text-xl text-ink">The league is quiet. Let&apos;s change that.</p>
+              <p className="mt-3 text-sm leading-6 text-ink/68">
+                No events have been logged yet. Start a project or browse open issues to get things moving.
+              </p>
+              <div className="mt-5 flex flex-wrap justify-center gap-3">
+                <Link href="/issues" className="rounded-full border border-accent bg-accent px-4 py-2 text-sm font-medium text-white">
+                  Browse open issues
+                </Link>
+                <Link href="/start" className="rounded-full border border-line bg-white/70 px-4 py-2 text-sm font-medium text-ink">
+                  Start a project
+                </Link>
               </div>
-              <p className="mt-2 text-sm leading-6 text-ink/68">{event.summary}</p>
-            </Link>
-          ))}
+            </div>
+          )}
         </div>
       </section>
     </div>
