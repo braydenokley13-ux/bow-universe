@@ -104,8 +104,13 @@ model User {
   email                 String                 @unique
   passwordHash          String
   role                  UserRole               @default(STUDENT)
+  linkedTeamId          String?
+  commissionerId        String?
   createdAt             DateTime               @default(now())
   onboardingCompletedAt DateTime?
+  linkedTeam            Team?                  @relation("LinkedStudentTeam", fields: [linkedTeamId], references: [id], onDelete: SetNull)
+  commissioner          User?                  @relation("CommissionerLinkedStudents", fields: [commissionerId], references: [id], onDelete: SetNull)
+  linkedStudents        User[]                 @relation("CommissionerLinkedStudents")
   createdRuleSets       RuleSet[]              @relation("RuleSetCreatedBy")
   createdProposals      Proposal[]             @relation("ProposalCreatedBy")
   createdIssues         Issue[]                @relation("IssueCreatedBy")
@@ -120,6 +125,11 @@ model User {
   projectRevisions      ProjectRevision[]      @relation("ProjectRevisionByUser")
   proposalRevisions     ProposalRevision[]     @relation("ProposalRevisionByUser")
   publishedPublications Publication[]          @relation("PublicationPublishedBy")
+  createdStudentInvites StudentInvite[]        @relation("StudentInviteCreatedBy")
+  studentInvites        StudentInvite[]        @relation("StudentInviteUser")
+
+  @@index([linkedTeamId])
+  @@index([commissionerId])
 }
 
 model Team {
@@ -135,6 +145,23 @@ model Team {
   projects             Project[]
   issues               Issue[]
   publications         Publication[]
+  linkedStudents       User[]       @relation("LinkedStudentTeam")
+}
+
+model StudentInvite {
+  id              String   @id @default(cuid())
+  token           String   @unique
+  userId          String
+  createdByUserId String
+  createdAt       DateTime @default(now())
+  expiresAt       DateTime
+  usedAt          DateTime?
+  user            User     @relation("StudentInviteUser", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy       User     @relation("StudentInviteCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([createdByUserId, createdAt])
+  @@index([usedAt])
 }
 
 model Season {

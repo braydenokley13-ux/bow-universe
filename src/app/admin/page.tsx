@@ -7,8 +7,10 @@ import { AdminIssueWorkbench } from "@/components/admin-issue-workbench";
 import { AdminProposalWorkflowCard } from "@/components/admin-proposal-workflow-card";
 import { AdminQueueSummary } from "@/components/admin-queue-summary";
 import { AdminRoleCard } from "@/components/admin-role-card";
+import { AdminStudentAccountManager } from "@/components/admin-student-account-manager";
 import {
   advanceSeasonAction,
+  createStudentAccountAction,
   recordDecisionAction,
   saveIssueAction,
   updateProposalStatusAction,
@@ -19,9 +21,15 @@ import { getAdminPageData } from "@/server/data";
 import { getProposalReviewReadiness } from "@/lib/review-readiness";
 import { shouldShowDecisionDesk } from "@/lib/workflow-guards";
 
-export default async function AdminPage() {
+export default async function AdminPage({
+  searchParams
+}: {
+  searchParams?: Promise<{ studentAccount?: string; studentEmail?: string }>;
+}) {
   await requireAdmin();
+  const resolvedSearchParams = (await searchParams) ?? {};
   const { users, issues, proposals, currentSeason, rulesets, teams, activity, publications } = await getAdminPageData();
+  const activationBaseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
 
   const proposalReadiness = new Map(
     proposals.map((proposal) => [proposal.id, getProposalReviewReadiness(proposal)])
@@ -36,6 +44,7 @@ export default async function AdminPage() {
   const publicationQueue = publications.filter(
     (publication) => !publication.externalApproved || !publication.externalReady
   );
+  const students = users.filter((user) => user.role === "STUDENT");
 
   return (
     <div className="space-y-8">
@@ -111,6 +120,15 @@ export default async function AdminPage() {
           </form>
         </div>
       </section>
+
+      <AdminStudentAccountManager
+        action={createStudentAccountAction}
+        activationBaseUrl={activationBaseUrl}
+        notice={resolvedSearchParams.studentAccount}
+        studentEmail={resolvedSearchParams.studentEmail}
+        teams={teams}
+        students={students}
+      />
 
       <div id="issue-workbench">
         <AdminIssueWorkbench issues={issues} teams={teams} action={saveIssueAction} />
@@ -213,7 +231,7 @@ export default async function AdminPage() {
 
         <div className="mt-5 space-y-4">
           {users.map((user) => (
-            <AdminRoleCard key={user.id} user={user} action={updateUserRoleAction} />
+            <AdminRoleCard key={user.id} user={user} teams={teams} action={updateUserRoleAction} />
           ))}
         </div>
       </section>

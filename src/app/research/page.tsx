@@ -35,10 +35,11 @@ function groupLabel(mode: BrowseMode, publication: Awaited<ReturnType<typeof get
 export default async function ResearchPage({
   searchParams
 }: {
-  searchParams?: { view?: string };
+  searchParams?: Promise<{ view?: string }>;
 }) {
   const publications = await getResearchPageData();
-  const view = (searchParams?.view as BrowseMode | undefined) ?? "recent";
+  const resolvedSearchParams = (await searchParams) ?? {};
+  const view = (resolvedSearchParams.view as BrowseMode | undefined) ?? "recent";
   const groups = publications.reduce<Record<string, typeof publications>>((accumulator, publication) => {
     const key = groupLabel(view, publication);
     accumulator[key] ??= [];

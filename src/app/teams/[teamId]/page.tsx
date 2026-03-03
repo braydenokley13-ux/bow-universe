@@ -7,8 +7,9 @@ import { SectionHeading } from "@/components/section-heading";
 import { formatCompactCurrency } from "@/lib/utils";
 import { getTeamPageData } from "@/server/data";
 
-export default async function TeamDetailPage({ params }: { params: { teamId: string } }) {
-  const data = await getTeamPageData(params.teamId);
+export default async function TeamDetailPage({ params }: { params: Promise<{ teamId: string }> }) {
+  const { teamId } = await params;
+  const data = await getTeamPageData(teamId);
 
   if (!data) {
     notFound();

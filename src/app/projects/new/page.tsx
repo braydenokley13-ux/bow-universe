@@ -20,11 +20,12 @@ const validLanes: LaneTag[] = [
 export default async function NewProjectPage({
   searchParams
 }: {
-  searchParams?: { lane?: string };
+  searchParams?: Promise<{ lane?: string }>;
 }) {
   const viewer = await getViewer();
   const { issues, teams, users, proposals } = await getProjectStudioData();
-  const requestedLane = searchParams?.lane as LaneTag | undefined;
+  const resolvedSearchParams = (await searchParams) ?? {};
+  const requestedLane = resolvedSearchParams.lane as LaneTag | undefined;
   const lanePrimary = validLanes.includes(requestedLane ?? "ECONOMIC_INVESTIGATORS")
     ? (requestedLane as LaneTag)
     : "ECONOMIC_INVESTIGATORS";

@@ -4,7 +4,11 @@ import { FormEvent, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 
-export function LoginForm() {
+type LoginFormProps = {
+  defaultEmail?: string;
+};
+
+export function LoginForm({ defaultEmail = "commissioner@bow.local" }: LoginFormProps) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -26,7 +30,7 @@ export function LoginForm() {
       });
 
       if (result?.error) {
-        setError("Those credentials did not match a seeded BOW Universe account.");
+        setError("Those credentials did not match a BOW Universe account.");
         return;
       }
 
@@ -45,7 +49,7 @@ export function LoginForm() {
           id="email"
           name="email"
           type="email"
-          defaultValue="commissioner@bow.local"
+          defaultValue={defaultEmail}
           className="w-full rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none ring-0 placeholder:text-ink/35 focus:border-accent"
         />
       </div>
@@ -58,7 +62,7 @@ export function LoginForm() {
           id="password"
           name="password"
           type="password"
-          defaultValue="bowuniverse"
+          placeholder="Enter your password"
           className="w-full rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none ring-0 placeholder:text-ink/35 focus:border-accent"
         />
       </div>

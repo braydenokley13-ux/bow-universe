@@ -458,7 +458,16 @@ export async function getProposalPageData(proposalId: string) {
 
 export async function getAdminPageData() {
   const [users, issues, proposals, currentSeason, rulesets, teams, activity, publications] = await Promise.all([
-    prisma.user.findMany({ orderBy: [{ role: "desc" }, { name: "asc" }] }),
+    prisma.user.findMany({
+      include: {
+        linkedTeam: true,
+        commissioner: true,
+        studentInvites: {
+          orderBy: { createdAt: "desc" }
+        }
+      },
+      orderBy: [{ role: "desc" }, { name: "asc" }]
+    }),
     prisma.issue.findMany({
       include: {
         team: true

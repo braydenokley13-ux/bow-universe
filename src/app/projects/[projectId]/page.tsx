@@ -28,8 +28,9 @@ const reviewStatuses = [
   "APPROVED_FOR_EXTERNAL_PUBLICATION"
 ] as const;
 
-export default async function ProjectDetailPage({ params }: { params: { projectId: string } }) {
-  const [viewer, project] = await Promise.all([getViewer(), getProjectPageData(params.projectId)]);
+export default async function ProjectDetailPage({ params }: { params: Promise<{ projectId: string }> }) {
+  const { projectId } = await params;
+  const [viewer, project] = await Promise.all([getViewer(), getProjectPageData(projectId)]);
 
   if (!project) {
     notFound();

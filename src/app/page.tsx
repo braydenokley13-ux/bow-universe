@@ -62,7 +62,15 @@ export default async function HomePage() {
     const [userRecord, { openProjects, openProposals }, league] = await Promise.all([
       prisma.user.findUnique({
         where: { id: viewer.id },
-        select: { onboardingCompletedAt: true }
+        select: {
+          onboardingCompletedAt: true,
+          linkedTeam: {
+            select: {
+              id: true,
+              name: true
+            }
+          }
+        }
       }),
       getStudentDashboardData(viewer.id),
       getDashboardData()
@@ -80,6 +88,7 @@ export default async function HomePage() {
     return (
       <StudentDashboard
         viewer={viewer}
+        linkedTeam={userRecord?.linkedTeam ?? null}
         openProjects={openProjects}
         openProposals={openProposals}
         league={league}
@@ -100,7 +109,6 @@ export default async function HomePage() {
     getIssuesPageData(),
     getResearchPageData()
   ]);
-
   const topTaxTeams = [...latestTeamSeasons].sort((a, b) => b.taxPaid - a.taxPaid).slice(0, 3);
   const guidance = buildDashboardGuidance({
     viewerRole: viewer.role,

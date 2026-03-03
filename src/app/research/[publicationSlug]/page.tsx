@@ -17,9 +17,10 @@ import {
 export default async function PublicationDetailPage({
   params
 }: {
-  params: { publicationSlug: string };
+  params: Promise<{ publicationSlug: string }>;
 }) {
-  const record = await getPublicationPageData(params.publicationSlug);
+  const { publicationSlug } = await params;
+  const record = await getPublicationPageData(publicationSlug);
 
   if (!record?.publication) {
     notFound();

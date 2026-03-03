@@ -35,8 +35,9 @@ const sandboxMetricNotes = {
   revenueInequality: "A lower value means the gap between high-revenue and low-revenue teams is narrowing."
 };
 
-export default async function ProposalDetailPage({ params }: { params: { proposalId: string } }) {
-  const [viewer, proposal] = await Promise.all([getViewer(), getProposalPageData(params.proposalId)]);
+export default async function ProposalDetailPage({ params }: { params: Promise<{ proposalId: string }> }) {
+  const { proposalId } = await params;
+  const [viewer, proposal] = await Promise.all([getViewer(), getProposalPageData(proposalId)]);
 
   if (!proposal) {
     notFound();

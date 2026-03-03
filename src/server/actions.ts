@@ -1,5 +1,8 @@
 "use server";
 
+import { randomBytes } from "node:crypto";
+
+import { hash } from "bcryptjs";
 import {
   DecisionType,
   ExternalPublicationTarget,
@@ -79,6 +82,33 @@ const issueSchema = z.object({
   teamId: z.string().optional().nullable(),
   evidenceMd: z.string().min(4)
 });
+
+const studentAccountSchema = z.object({
+  name: z.string().trim().min(2).max(80),
+  email: z.string().trim().email(),
+  linkedTeamId: z.string().trim().optional().nullable()
+});
+
+const studentActivationSchema = z
+  .object({
+    token: z.string().min(20),
+    password: z.string().min(8),
+    confirmPassword: z.string().min(8)
+  })
+  .refine((input) => input.password === input.confirmPassword, {
+    message: "Passwords must match.",
+    path: ["confirmPassword"]
+  });
+
+const studentAccountsAnchor = "#student-accounts";
+
+function redirectToStudentAccounts(status: string): never {
+  redirect(`/admin?studentAccount=${encodeURIComponent(status)}${studentAccountsAnchor}`);
+}
+
+function redirectToStudentActivation(token: string, status: string): never {
+  redirect(`/activate/${encodeURIComponent(token)}?status=${encodeURIComponent(status)}`);
+}
 
 function asJson(value: unknown): Prisma.InputJsonValue {
   return value as Prisma.InputJsonValue;
@@ -1015,27 +1045,200 @@ export async function updateUserRoleAction(formData: FormData) {
   const viewer = await requireAdmin();
   const userId = String(formData.get("userId") ?? "");
   const role = String(formData.get("role") ?? "") as UserRole;
+  const linkedTeamIdInput = String(formData.get("linkedTeamId") ?? "").trim();
 
   if (!userId || !Object.values(UserRole).includes(role)) {
     return;
   }
 
+  if (linkedTeamIdInput) {
+    const linkedTeam = await prisma.team.findUnique({
+      where: { id: linkedTeamIdInput },
+      select: { id: true }
+    });
+
+    if (!linkedTeam) {
+      return;
+    }
+  }
+
+  const nextLinkedTeamId = role === UserRole.STUDENT ? linkedTeamIdInput || null : null;
+
   await prisma.user.update({
     where: { id: userId },
-    data: { role }
+    data: {
+      role,
+      linkedTeamId: nextLinkedTeamId
+    }
   });
 
   await createActivityEvent(prisma, {
     type: "user",
     title: `Updated user role`,
-    summary: `${viewer.name} changed a user role to ${role}.`,
+    summary: `${viewer.name} changed a user role to ${role}${nextLinkedTeamId ? " and updated the linked team." : "."}`,
     entityType: "User",
     entityId: userId,
     createdByUserId: viewer.id,
-    metadata: { role }
+    metadata: {
+      role,
+      linkedTeamId: nextLinkedTeamId
+    }
   });
 
   revalidatePath("/admin");
+}
+
+export async function createStudentAccountAction(formData: FormData) {
+  const viewer = await requireAdmin();
+  const parsed = studentAccountSchema.safeParse({
+    name: formData.get("name"),
+    email: formData.get("email"),
+    linkedTeamId: formData.get("linkedTeamId")
+  });
+
+  if (!parsed.success) {
+    redirectToStudentAccounts("invalid");
+  }
+
+  const { data } = parsed;
+  const email = data.email.toLowerCase();
+  const linkedTeamId = data.linkedTeamId || null;
+
+  if (linkedTeamId) {
+    const linkedTeam = await prisma.team.findUnique({
+      where: { id: linkedTeamId },
+      select: { id: true }
+    });
+
+    if (!linkedTeam) {
+      redirectToStudentAccounts("team-missing");
+    }
+  }
+
+  const existingUser = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true }
+  });
+
+  if (existingUser) {
+    redirectToStudentAccounts("email-taken");
+  }
+
+  const activationToken = randomBytes(24).toString("hex");
+  const placeholderPasswordHash = await hash(randomBytes(32).toString("hex"), 10);
+  const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+
+  const createdStudent = await prisma.$transaction(async (tx) => {
+    const user = await tx.user.create({
+      data: {
+        name: data.name,
+        email,
+        passwordHash: placeholderPasswordHash,
+        role: UserRole.STUDENT,
+        linkedTeamId,
+        commissionerId: viewer.id
+      }
+    });
+
+    await tx.studentInvite.create({
+      data: {
+        token: activationToken,
+        userId: user.id,
+        createdByUserId: viewer.id,
+        expiresAt
+      }
+    });
+
+    await createActivityEvent(tx, {
+      type: "user",
+      title: `Created student account for ${user.name}`,
+      summary: `${viewer.name} created a new student account${linkedTeamId ? " and linked it to a team." : "."}`,
+      entityType: "User",
+      entityId: user.id,
+      createdByUserId: viewer.id,
+      metadata: {
+        email,
+        linkedTeamId,
+        expiresAt
+      }
+    });
+
+    return user;
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/login");
+  redirect(
+    `/admin?studentAccount=created&studentEmail=${encodeURIComponent(createdStudent.email)}${studentAccountsAnchor}`
+  );
+}
+
+export async function activateStudentInviteAction(formData: FormData) {
+  const parsed = studentActivationSchema.safeParse({
+    token: formData.get("token"),
+    password: formData.get("password"),
+    confirmPassword: formData.get("confirmPassword")
+  });
+
+  const token = String(formData.get("token") ?? "");
+
+  if (!parsed.success) {
+    redirectToStudentActivation(token, "invalid");
+  }
+
+  const { data } = parsed;
+  const invite = await prisma.studentInvite.findUnique({
+    where: { token: data.token },
+    include: {
+      user: true
+    }
+  });
+
+  if (!invite) {
+    redirect("/login");
+  }
+
+  if (invite.usedAt) {
+    redirectToStudentActivation(invite.token, "used");
+  }
+
+  if (invite.expiresAt.getTime() < Date.now()) {
+    redirectToStudentActivation(invite.token, "expired");
+  }
+
+  const passwordHash = await hash(data.password, 10);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: invite.userId },
+      data: {
+        passwordHash
+      }
+    });
+
+    await tx.studentInvite.update({
+      where: { id: invite.id },
+      data: {
+        usedAt: new Date()
+      }
+    });
+
+    await createActivityEvent(tx, {
+      type: "user",
+      title: `Activated student account for ${invite.user.name}`,
+      summary: `${invite.user.name} activated a commissioner-created student account.`,
+      entityType: "User",
+      entityId: invite.userId,
+      createdByUserId: invite.userId,
+      metadata: {
+        inviteId: invite.id
+      }
+    });
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/login");
+  redirect(`/login?email=${encodeURIComponent(invite.user.email)}&activated=1`);
 }
 
 export async function updateProposalStatusAction(formData: FormData) {

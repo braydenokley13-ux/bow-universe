@@ -17,8 +17,9 @@ function metricMeaning(label: string, value: number | null | undefined) {
   return `This issue is tracking ${label.toLowerCase()} at ${value}. Use that number as a clue about where league pressure is building, not as the whole explanation by itself.`;
 }
 
-export default async function IssueDetailPage({ params }: { params: { issueId: string } }) {
-  const issue = await getIssuePageData(params.issueId);
+export default async function IssueDetailPage({ params }: { params: Promise<{ issueId: string }> }) {
+  const { issueId } = await params;
+  const issue = await getIssuePageData(issueId);
 
   if (!issue) {
     notFound();

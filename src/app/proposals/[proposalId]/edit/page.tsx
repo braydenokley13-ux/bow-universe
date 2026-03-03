@@ -10,11 +10,12 @@ import {
   parseProposalJson
 } from "@/server/data";
 
-export default async function EditProposalPage({ params }: { params: { proposalId: string } }) {
+export default async function EditProposalPage({ params }: { params: Promise<{ proposalId: string }> }) {
+  const { proposalId } = await params;
   const [viewer, studioData, proposalRecord] = await Promise.all([
     getViewer(),
-    getProposalStudioData(params.proposalId),
-    getProposalPageData(params.proposalId)
+    getProposalStudioData(proposalId),
+    getProposalPageData(proposalId)
   ]);
 
   if (!studioData.proposal || !proposalRecord) {

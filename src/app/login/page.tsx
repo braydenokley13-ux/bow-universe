@@ -5,8 +5,13 @@ import { LoginForm } from "@/components/login-form";
 import { SectionHeading } from "@/components/section-heading";
 import { getViewer } from "@/server/auth";
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams
+}: {
+  searchParams?: Promise<{ email?: string; activated?: string }>;
+}) {
   const viewer = await getViewer();
+  const resolvedSearchParams = (await searchParams) ?? {};
 
   if (viewer) {
     redirect("/");
@@ -18,7 +23,7 @@ export default async function LoginPage() {
         <SectionHeading
           eyebrow="Access"
           title="Sign in to the research terminal"
-          description="Credentials auth is now live. Use one of the seeded accounts below to create projects, vote on proposals, or access commissioner controls."
+          description="Credentials auth is live. Use a seeded demo account or a commissioner-created student account to enter the research terminal."
         />
 
         <div className="panel p-6">
@@ -48,8 +53,14 @@ export default async function LoginPage() {
           Signing in enables writing, comments, proposal voting, and commissioner actions.
         </p>
 
+        {resolvedSearchParams.activated === "1" ? (
+          <div className="mt-5 rounded-2xl border border-success/30 bg-success/10 px-4 py-3 text-sm text-success">
+            Account activated. Sign in with the email and password you just set.
+          </div>
+        ) : null}
+
         <div className="mt-6">
-          <LoginForm />
+          <LoginForm defaultEmail={resolvedSearchParams.email} />
         </div>
       </section>
     </div>

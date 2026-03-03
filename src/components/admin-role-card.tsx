@@ -6,11 +6,17 @@ type AdminRoleCardProps = {
     name: string;
     email: string;
     role: string;
+    linkedTeamId?: string | null;
+    linkedTeam?: { name: string } | null;
   };
+  teams: Array<{
+    id: string;
+    name: string;
+  }>;
   action: typeof updateUserRoleAction;
 };
 
-export function AdminRoleCard({ user, action }: AdminRoleCardProps) {
+export function AdminRoleCard({ user, teams, action }: AdminRoleCardProps) {
   return (
     <form
       action={action}
@@ -24,8 +30,29 @@ export function AdminRoleCard({ user, action }: AdminRoleCardProps) {
           <p className="mt-2 text-xs uppercase tracking-[0.2em] text-ink/50">
             Change roles carefully. Admins can move workflow states and publish archive records.
           </p>
+          {user.role === "STUDENT" ? (
+            <p className="mt-2 text-xs uppercase tracking-[0.2em] text-ink/45">
+              {user.linkedTeam ? `Linked team: ${user.linkedTeam.name}` : "No team linked yet"}
+            </p>
+          ) : null}
         </div>
         <div className="flex items-center gap-3">
+          {user.role === "STUDENT" ? (
+            <select
+              name="linkedTeamId"
+              defaultValue={user.linkedTeamId ?? ""}
+              className="rounded-2xl border border-line bg-white px-4 py-2 text-sm text-ink outline-none focus:border-accent"
+            >
+              <option value="">No linked team</option>
+              {teams.map((team) => (
+                <option key={team.id} value={team.id}>
+                  {team.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <input type="hidden" name="linkedTeamId" value="" />
+          )}
           <select
             name="role"
             defaultValue={user.role}

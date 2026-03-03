@@ -18,13 +18,14 @@ function toneForSeverity(severity: number) {
 export default async function IssuesPage({
   searchParams
 }: {
-  searchParams?: { status?: string; severity?: string };
+  searchParams?: Promise<{ status?: string; severity?: string }>;
 }) {
   const issues = await getIssuesPageData();
+  const resolvedSearchParams = (await searchParams) ?? {};
   const statuses = ["ALL", "OPEN", "IN_REVIEW", "RESOLVED"] as const;
   const severityBands = ["ALL", "4", "3", "2", "1"] as const;
-  const selectedStatus = searchParams?.status ?? "ALL";
-  const selectedSeverity = searchParams?.severity ?? "ALL";
+  const selectedStatus = resolvedSearchParams.status ?? "ALL";
+  const selectedSeverity = resolvedSearchParams.severity ?? "ALL";
   const filteredIssues = issues.filter((issue) => {
     const statusMatches = selectedStatus === "ALL" || issue.status === selectedStatus;
     const severityMatches =

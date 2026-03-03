@@ -6,8 +6,9 @@ import { updateProjectAction } from "@/server/actions";
 import { getViewer, requireUser } from "@/server/auth";
 import { getProjectStudioData, parseProjectJson } from "@/server/data";
 
-export default async function EditProjectPage({ params }: { params: { projectId: string } }) {
-  const [viewer, studioData] = await Promise.all([getViewer(), getProjectStudioData(params.projectId)]);
+export default async function EditProjectPage({ params }: { params: Promise<{ projectId: string }> }) {
+  const { projectId } = await params;
+  const [viewer, studioData] = await Promise.all([getViewer(), getProjectStudioData(projectId)]);
   const { project, issues, teams, users, proposals } = studioData;
 
   if (!project) {

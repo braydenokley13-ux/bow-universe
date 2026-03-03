@@ -38,6 +38,7 @@ type LeagueMetrics = {
 
 type StudentDashboardProps = {
   viewer: Viewer;
+  linkedTeam: { id: string; name: string } | null;
   openProjects: ActiveProject[];
   openProposals: ActiveProposal[];
   league: LeagueMetrics;
@@ -62,7 +63,7 @@ function eventHref(entityType: string | null, entityId: string | null) {
   return "#";
 }
 
-export function StudentDashboard({ viewer, openProjects, openProposals, league }: StudentDashboardProps) {
+export function StudentDashboard({ viewer, linkedTeam, openProjects, openProposals, league }: StudentDashboardProps) {
   const totalOpen = openProjects.length + openProposals.length;
   const { currentSeason, metrics, activity } = league;
 
@@ -86,6 +87,26 @@ export function StudentDashboard({ viewer, openProjects, openProposals, league }
           </p>
         )}
       </section>
+
+      {linkedTeam ? (
+        <section className="panel p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Linked team</p>
+              <h3 className="mt-3 font-display text-2xl text-ink">{linkedTeam.name}</h3>
+              <p className="mt-2 text-sm leading-6 text-ink/70">
+                Your commissioner linked your account to this team, so this is a strong place to start when you open team snapshots, issues, and strategy work.
+              </p>
+            </div>
+            <Link
+              href={`/teams/${linkedTeam.id}`}
+              className="rounded-full border border-accent bg-accent px-4 py-2 text-sm font-medium text-white"
+            >
+              Open linked team
+            </Link>
+          </div>
+        </section>
+      ) : null}
 
       {/* Active work */}
       {totalOpen > 0 && (

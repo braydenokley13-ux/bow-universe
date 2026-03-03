@@ -36,10 +36,11 @@ function categoryForStatus(status: string) {
 export default async function ProposalsPage({
   searchParams
 }: {
-  searchParams?: { status?: string };
+  searchParams?: Promise<{ status?: string }>;
 }) {
   const [viewer, proposals] = await Promise.all([getViewer(), getProposalsPageData()]);
-  const selectedStatus = searchParams?.status ?? "ALL";
+  const resolvedSearchParams = (await searchParams) ?? {};
+  const selectedStatus = resolvedSearchParams.status ?? "ALL";
   const filteredProposals = proposals.filter(
     (proposal) => selectedStatus === "ALL" || proposal.status === selectedStatus
   );
