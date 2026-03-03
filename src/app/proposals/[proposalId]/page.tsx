@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { Badge } from "@/components/badge";
+import { Breadcrumb } from "@/components/breadcrumb";
 import { PrintButton } from "@/components/print-button";
 import { ReviewSidebar } from "@/components/review-sidebar";
 import { SectionHeading } from "@/components/section-heading";
@@ -50,6 +51,7 @@ export default async function ProposalDetailPage({ params }: { params: { proposa
 
   return (
     <div className="space-y-8 print-publication">
+      <Breadcrumb items={[{ label: "Home", href: "/" }, { label: "Proposals", href: "/proposals" }, { label: proposal.title.length > 40 ? proposal.title.slice(0, 40) + "…" : proposal.title }]} />
       <SectionHeading
         eyebrow="Policy Memo"
         title={proposal.title}

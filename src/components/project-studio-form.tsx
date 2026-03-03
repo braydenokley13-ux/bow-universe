@@ -197,29 +197,30 @@ export function ProjectStudioForm({
   const stepSyncRef = useRef(false);
   const autosaveReadyRef = useRef(false);
   const currentStepQuery = searchParams.get("step");
+  const VALID_LANE_TAGS: LaneTag[] = ["TOOL_BUILDERS", "POLICY_REFORM_ARCHITECTS", "STRATEGIC_OPERATORS", "ECONOMIC_INVESTIGATORS"];
+  const laneQuery = searchParams.get("lane");
+  const laneFromUrl: LaneTag | null = laneQuery && VALID_LANE_TAGS.includes(laneQuery as LaneTag) ? (laneQuery as LaneTag) : null;
+  const defaultLane: LaneTag = initial?.lanePrimary ?? laneFromUrl ?? "ECONOMIC_INVESTIGATORS";
   const [draftId, setDraftId] = useState(initial?.id ?? "");
   const [laneSectionStore, setLaneSectionStore] = useState<ProjectCoachLaneSectionStore>(() =>
-    createInitialLaneSectionStore(
-      initial?.lanePrimary ?? "ECONOMIC_INVESTIGATORS",
-      initial?.laneSections
-    )
+    createInitialLaneSectionStore(defaultLane, initial?.laneSections)
   );
   const [values, setValues] = useState<ProjectCoachValues>(() =>
     createInitialProjectCoachValues({
-      lanePrimary: initial?.lanePrimary ?? "ECONOMIC_INVESTIGATORS",
+      lanePrimary: defaultLane,
       projectType:
         initial?.projectType ??
-        (initial?.lanePrimary === "TOOL_BUILDERS"
+        (defaultLane === "TOOL_BUILDERS"
           ? ProjectType.TOOL
-          : initial?.lanePrimary === "STRATEGIC_OPERATORS"
+          : defaultLane === "STRATEGIC_OPERATORS"
             ? ProjectType.STRATEGY
-            : initial?.lanePrimary === "POLICY_REFORM_ARCHITECTS"
+            : defaultLane === "POLICY_REFORM_ARCHITECTS"
               ? ProjectType.PROPOSAL_SUPPORT
               : ProjectType.INVESTIGATION),
       laneTags:
         initial?.laneTags && initial.laneTags.length > 0
-          ? uniqueLaneTags(initial.laneTags, initial.lanePrimary)
-          : [initial?.lanePrimary ?? "ECONOMIC_INVESTIGATORS"],
+          ? uniqueLaneTags(initial.laneTags, defaultLane)
+          : [defaultLane],
       issueIds: initial?.issueIds ?? [],
       teamId: initial?.teamId ?? "",
       supportingProposalId: initial?.supportingProposalId ?? "",
@@ -241,11 +242,7 @@ export function ProjectStudioForm({
       references: referencesToText(initial?.references ?? []),
       keywords: initial?.keywords.join(", ") ?? "",
       keyTakeaways: initial?.keyTakeaways.join("\n") ?? "",
-      laneSections:
-        createInitialLaneSectionStore(
-          initial?.lanePrimary ?? "ECONOMIC_INVESTIGATORS",
-          initial?.laneSections
-        )[initial?.lanePrimary ?? "ECONOMIC_INVESTIGATORS"]
+      laneSections: createInitialLaneSectionStore(defaultLane, initial?.laneSections)[defaultLane]
     })
   );
   const [autosaveState, setAutosaveState] = useState<AutosaveState>({
@@ -765,6 +762,7 @@ export function ProjectStudioForm({
         autosaveTone={autosaveState.tone}
         completedSteps={completedSteps}
         totalSteps={projectCoachStepOrder.length}
+        currentStepName={currentStep.shortTitle}
         rail={<WizardStepRail items={railItems} onSelect={selectFromRail} />}
         footer={
           <WizardFooter

@@ -625,6 +625,7 @@ export function ProposalForm({ issues, ruleSets, action, initial, intentLabel }:
         autosaveTone={autosaveState.tone}
         completedSteps={completedSteps}
         totalSteps={proposalCoachStepOrder.length}
+        currentStepName={proposalCoachSteps[currentStepId].shortTitle}
         rail={<WizardStepRail items={railItems} onSelect={selectFromRail} />}
         footer={
           <WizardFooter

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 
 import { Badge } from "@/components/badge";
+import { Breadcrumb } from "@/components/breadcrumb";
 import { NextActionCard } from "@/components/next-action-card";
 import { SectionHeading } from "@/components/section-heading";
 import { classifyIssueWorkGap } from "@/lib/discovery-guidance";
@@ -43,6 +44,7 @@ export default async function IssueDetailPage({ params }: { params: { issueId: s
 
   return (
     <div className="space-y-8">
+      <Breadcrumb items={[{ label: "Home", href: "/" }, { label: "Issues", href: "/issues" }, { label: issue.title.length > 40 ? issue.title.slice(0, 40) + "…" : issue.title }]} />
       <SectionHeading eyebrow="Issue Detail" title={issue.title} description={issue.description} />
 
       <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">

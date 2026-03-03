@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { Badge } from "@/components/badge";
+import { Breadcrumb } from "@/components/breadcrumb";
 import { SectionHeading } from "@/components/section-heading";
 import { formatCompactCurrency } from "@/lib/utils";
 import { getTeamPageData } from "@/server/data";
@@ -15,6 +16,7 @@ export default async function TeamDetailPage({ params }: { params: { teamId: str
 
   return (
     <div className="space-y-8">
+      <Breadcrumb items={[{ label: "Home", href: "/" }, { label: "Teams", href: "/teams" }, { label: data.team.name }]} />
       <SectionHeading
         eyebrow="Team Detail"
         title={data.team.name}

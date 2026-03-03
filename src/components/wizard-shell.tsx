@@ -7,21 +7,38 @@ type WizardShellProps = {
   autosaveTone: "idle" | "saving" | "saved" | "error";
   completedSteps: number;
   totalSteps: number;
+  currentStepName?: string;
   rail: ReactNode;
   children: ReactNode;
   footer: ReactNode;
 };
 
-function autosaveToneClass(tone: WizardShellProps["autosaveTone"]) {
+function autosaveDisplay(tone: WizardShellProps["autosaveTone"], message: string) {
   if (tone === "error") {
-    return "text-danger";
+    return {
+      className: "rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger",
+      text: "Your work wasn't saved. Check your connection and try again."
+    };
   }
 
   if (tone === "saved") {
-    return "text-success";
+    return {
+      className: "rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-sm text-success",
+      text: `✓ ${message}`
+    };
   }
 
-  return "text-ink/68";
+  if (tone === "saving") {
+    return {
+      className: "rounded-xl border border-line bg-white/70 px-4 py-3 text-sm text-ink/68 animate-pulse",
+      text: "Saving…"
+    };
+  }
+
+  return {
+    className: "rounded-xl border border-line bg-white/70 px-4 py-3 text-sm text-ink/55",
+    text: message
+  };
 }
 
 export function WizardShell({
@@ -31,38 +48,49 @@ export function WizardShell({
   autosaveTone,
   completedSteps,
   totalSteps,
+  currentStepName,
   rail,
   children,
   footer
 }: WizardShellProps) {
+  const progressPct = totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0;
+  const autosave = autosaveDisplay(autosaveTone, autosaveMessage);
+
   return (
     <div className="space-y-6">
       <section className="panel p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="font-mono text-xs uppercase tracking-[0.24em] text-accent">Adaptive coach</p>
-            <h3 className="mt-3 font-display text-3xl text-ink">{progressTitle}</h3>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-ink/68">{progressDescription}</p>
+        <div>
+          <p className="font-mono text-xs uppercase tracking-[0.24em] text-accent">Adaptive coach</p>
+          <h3 className="mt-3 font-display text-3xl text-ink">{progressTitle}</h3>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-ink/68">{progressDescription}</p>
+        </div>
+
+        {/* Progress bar */}
+        <div className="mt-5 space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm font-medium text-ink">
+                {completedSteps} of {totalSteps} sections ready
+              </span>
+              {currentStepName && (
+                <span className="rounded-full border border-accent/30 bg-accent/10 px-3 py-0.5 font-mono text-[11px] uppercase tracking-[0.18em] text-accent">
+                  Now: {currentStepName}
+                </span>
+              )}
+            </div>
+            <span className="font-mono text-xs text-ink/45">{progressPct}%</span>
           </div>
-          <div className="rounded-2xl border border-line bg-white/75 px-4 py-3 text-sm text-ink/72">
-            {completedSteps} of {totalSteps} steps strong enough to move on
+          <div className="h-2 w-full overflow-hidden rounded-full bg-line/40">
+            <div
+              className="h-full rounded-full bg-accent transition-all duration-500"
+              style={{ width: `${progressPct}%` }}
+            />
           </div>
         </div>
 
-        <div className="mt-5 grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
-          <div className="rounded-2xl border border-line bg-white/70 p-4">
-            <p className="font-medium text-ink">How this coach works</p>
-            <p className="mt-3 text-sm leading-6 text-ink/68">
-              Each screen asks for one small piece of thinking. The coach shows what strong work
-              looks like, what is still weak, and what to write next.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-line bg-white/70 p-4">
-            <p className="font-medium text-ink">Autosave</p>
-            <p className={`mt-3 text-sm leading-6 ${autosaveToneClass(autosaveTone)}`}>
-              {autosaveMessage}
-            </p>
-          </div>
+        {/* Autosave status */}
+        <div className="mt-4">
+          <div className={autosave.className}>{autosave.text}</div>
         </div>
       </section>
 
