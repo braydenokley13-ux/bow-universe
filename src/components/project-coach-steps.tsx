@@ -34,6 +34,7 @@ type ProjectStepLaneProps = StepCommonProps & {
   laneTagsEvaluation: ProjectCoachFieldEvaluation;
   lanePrimary: LaneTag;
   projectType: ProjectType;
+  laneTemplate: LaneTemplateDefinition;
   laneTags: LaneTag[];
   currentOutputLabel: string;
   onChangeLane: (value: LaneTag) => void;
@@ -189,6 +190,7 @@ export function ProjectStepLane({
   projectType,
   laneTags,
   currentOutputLabel,
+  laneTemplate,
   onChangeLane,
   onChangeProjectType,
   onToggleLaneTag
@@ -254,6 +256,14 @@ export function ProjectStepLane({
           <FieldCoach evaluation={laneTagsEvaluation} />
         </div>
       </ProjectFieldBlock>
+
+      {laneTemplate.examples[0] ? (
+        <div className="mt-6 rounded-2xl border border-line bg-white/65 p-5">
+          <p className="font-mono text-xs uppercase tracking-[0.22em] text-accent">See an example</p>
+          <p className="mt-2 font-medium text-ink">{laneTemplate.examples[0].title}</p>
+          <p className="mt-2 text-sm leading-6 text-ink/68">{laneTemplate.examples[0].body}</p>
+        </div>
+      ) : null}
     </ProjectStepLayout>
   );
 }

@@ -44,6 +44,19 @@ export function ProposalStepTitle({
           placeholder="Raise the revenue sharing rate to protect small-market flexibility"
         />
       </ProposalFieldBlock>
+
+      <div className="mt-6 rounded-2xl border border-line bg-white/65 p-5">
+        <p className="font-mono text-xs uppercase tracking-[0.22em] text-accent">See an example</p>
+        <p className="mt-2 font-medium text-ink">
+          Raise the revenue sharing rate to protect small-market flexibility
+        </p>
+        <p className="mt-2 text-sm leading-6 text-ink/68">
+          Small-market teams lose long-term flexibility faster than large-market teams when tax concentration rises, because the current revenue sharing rate does not compensate for the structural revenue gap between markets.
+        </p>
+        <p className="mt-3 text-xs text-ink/50">
+          A strong title names the reform. A strong problem statement says who is hurt and why the current rule causes it.
+        </p>
+      </div>
     </ProposalStepLayout>
   );
 }

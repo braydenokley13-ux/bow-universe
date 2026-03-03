@@ -65,6 +65,32 @@ export default async function IssuesPage({
       </section>
 
       <section className="space-y-4">
+        {filteredIssues.length === 0 ? (
+          <div className="panel p-8 text-center">
+            <p className="font-display text-2xl text-ink">No league issues right now.</p>
+            <p className="mt-3 text-sm leading-6 text-ink/68">
+              {selectedStatus !== "ALL" || selectedSeverity !== "ALL"
+                ? "No issues match those filters. Try clearing them to see the full board."
+                : "The commissioner will post problems here for you to investigate. Come back soon."}
+            </p>
+            <div className="mt-5 flex flex-wrap justify-center gap-3">
+              {selectedStatus !== "ALL" || selectedSeverity !== "ALL" ? (
+                <Link
+                  href="/issues"
+                  className="rounded-full border border-accent bg-accent px-4 py-2 text-sm font-medium text-white"
+                >
+                  Clear filters
+                </Link>
+              ) : null}
+              <Link
+                href="/"
+                className="rounded-full border border-line bg-white/70 px-4 py-2 text-sm font-medium text-ink"
+              >
+                Go to dashboard
+              </Link>
+            </div>
+          </div>
+        ) : null}
         {filteredIssues.map((issue) => {
           const metrics = parseIssueMetrics(issue.metricsJson);
           const gap = classifyIssueWorkGap({

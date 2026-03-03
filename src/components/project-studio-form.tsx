@@ -586,6 +586,7 @@ export function ProjectStudioForm({
             projectType={values.projectType}
             laneTags={values.laneTags}
             currentOutputLabel={currentOutputLabel}
+            laneTemplate={laneTemplate}
             onChangeLane={changeLane}
             onChangeProjectType={changeProjectType}
             onToggleLaneTag={toggleLaneTag}

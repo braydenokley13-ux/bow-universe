@@ -65,7 +65,7 @@ export default async function ProposalsPage({
         description="This board now surfaces open memo work first, then shows where each proposal sits in the governance and publication pipeline."
       />
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
         <div className="flex flex-wrap gap-2">
           {statuses.map((status) => (
             <Link
@@ -120,6 +120,40 @@ export default async function ProposalsPage({
             )}
           </div>
         </section>
+      ) : null}
+
+      {Object.keys(grouped).length === 0 ? (
+        <div className="panel p-8 text-center">
+          <p className="font-display text-2xl text-ink">No proposals yet.</p>
+          <p className="mt-3 text-sm leading-6 text-ink/68">
+            {selectedStatus !== "ALL"
+              ? "No proposals match that status filter. Try switching to All."
+              : "When you're ready to change a league rule, start here. Pick an issue, describe the problem, and propose a fix."}
+          </p>
+          <div className="mt-5 flex flex-wrap justify-center gap-3">
+            {selectedStatus !== "ALL" ? (
+              <Link
+                href="/proposals"
+                className="rounded-full border border-accent bg-accent px-4 py-2 text-sm font-medium text-white"
+              >
+                Show all proposals
+              </Link>
+            ) : (
+              <Link
+                href="/proposals/new"
+                className="rounded-full border border-accent bg-accent px-4 py-2 text-sm font-medium text-white"
+              >
+                Write your first memo
+              </Link>
+            )}
+            <Link
+              href="/issues"
+              className="rounded-full border border-line bg-white/70 px-4 py-2 text-sm font-medium text-ink"
+            >
+              Browse open issues
+            </Link>
+          </div>
+        </div>
       ) : null}
 
       {Object.entries(grouped).map(([groupTitle, groupItems]) => (

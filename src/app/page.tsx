@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Badge } from "@/components/badge";
 import { MetricCard } from "@/components/metric-card";
 import { SectionHeading } from "@/components/section-heading";
+import { StudentProgressStrip } from "@/components/student-progress-strip";
 import { advanceSeasonAction } from "@/server/actions";
 import { getViewer } from "@/server/auth";
 import { getDashboardData, getIssuesPageData, getProjectsPageData, getProposalsPageData, getResearchPageData } from "@/server/data";
@@ -50,6 +51,10 @@ export default async function HomePage() {
     getResearchPageData()
   ]);
   const topTaxTeams = [...latestTeamSeasons].sort((a, b) => b.taxPaid - a.taxPaid).slice(0, 3);
+  const viewerProjects =
+    viewer?.role === "STUDENT" ? projects.filter((p) => p.createdByUserId === viewer.id) : [];
+  const viewerProposals =
+    viewer?.role === "STUDENT" ? proposals.filter((p) => p.createdByUserId === viewer.id) : [];
   const guidance = buildDashboardGuidance({
     viewerRole: viewer?.role ?? null,
     viewerId: viewer?.id ?? null,
@@ -61,6 +66,10 @@ export default async function HomePage() {
 
   return (
     <div className="space-y-8">
+      {viewer?.role === "STUDENT" ? (
+        <StudentProgressStrip projects={viewerProjects} proposals={viewerProposals} />
+      ) : null}
+
       <SectionHeading
         eyebrow="League Dashboard"
         title="A calmer operating view for the BOW League"
@@ -156,7 +165,7 @@ export default async function HomePage() {
             <Badge tone="warn">Current season snapshot</Badge>
           </div>
 
-          <div className="mt-6 grid gap-4 md:grid-cols-3">
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 md:grid-cols-3">
             <div className="rounded-2xl border border-line bg-white/60 p-4">
               <p className="font-mono text-xs uppercase tracking-[0.22em] text-accent">Tax concentration</p>
               <p className="mt-3 font-display text-3xl text-ink">{metrics.taxConcentration.toFixed(2)}</p>
@@ -256,25 +265,48 @@ export default async function HomePage() {
         </div>
 
         <div className="mt-6 space-y-4">
-          {activity.map((event) => (
-            <Link
-              key={event.id}
-              href={eventHref(event.entityType, event.entityId)}
-              className="block rounded-2xl border border-line bg-white/55 p-4 hover:border-accent"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="font-medium text-ink">{event.title}</p>
-                <p className="font-mono text-xs uppercase tracking-[0.2em] text-ink/55">
-                  {new Date(event.createdAt).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric"
-                  })}
-                </p>
+          {activity.length > 0 ? (
+            activity.map((event) => (
+              <Link
+                key={event.id}
+                href={eventHref(event.entityType, event.entityId)}
+                className="block rounded-2xl border border-line bg-white/55 p-4 hover:border-accent"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="font-medium text-ink">{event.title}</p>
+                  <p className="font-mono text-xs uppercase tracking-[0.2em] text-ink/55">
+                    {new Date(event.createdAt).toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric"
+                    })}
+                  </p>
+                </div>
+                <p className="mt-2 text-sm leading-6 text-ink/68">{event.summary}</p>
+              </Link>
+            ))
+          ) : (
+            <div className="rounded-2xl border border-dashed border-line p-6 text-center">
+              <p className="font-display text-xl text-ink">The league is quiet. Let&apos;s change that.</p>
+              <p className="mt-3 text-sm leading-6 text-ink/68">
+                No events have been logged yet. Start a project or browse open issues to get things moving.
+              </p>
+              <div className="mt-5 flex flex-wrap justify-center gap-3">
+                <Link
+                  href="/issues"
+                  className="rounded-full border border-accent bg-accent px-4 py-2 text-sm font-medium text-white"
+                >
+                  Browse open issues
+                </Link>
+                <Link
+                  href="/start"
+                  className="rounded-full border border-line bg-white/70 px-4 py-2 text-sm font-medium text-ink"
+                >
+                  Start a project
+                </Link>
               </div>
-              <p className="mt-2 text-sm leading-6 text-ink/68">{event.summary}</p>
-            </Link>
-          ))}
+            </div>
+          )}
         </div>
       </section>
     </div>
