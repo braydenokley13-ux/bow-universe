@@ -87,6 +87,26 @@ const fieldNameById: Record<Exclude<ProposalCoachFieldId, "sandboxResult">, stri
   publicationSlug: "publicationSlug"
 };
 
+const proposalStepByFieldId: Record<Exclude<ProposalCoachFieldId, "sandboxResult">, ProposalCoachStepId> = {
+  issueId: "issue",
+  ruleSetId: "ruleset",
+  title: "title",
+  abstract: "abstract",
+  problem: "problem",
+  currentRuleContext: "currentRule",
+  proposedChange: "reform",
+  expectedImpact: "impact",
+  tradeoffs: "tradeoffs",
+  recommendation: "action",
+  methodsSummary: "action",
+  diffJson: "sandbox",
+  sandboxInterpretation: "sandbox",
+  references: "review",
+  keywords: "review",
+  keyTakeaways: "review",
+  publicationSlug: "review"
+};
+
 function hasAnyDraftContent(values: ProposalCoachValues, sandboxResult: SandboxImpactReport | null) {
   return Object.values(values).some((value) => value.trim().length > 0) || Boolean(sandboxResult);
 }
@@ -149,6 +169,12 @@ function replaceStepUrl(pathname: string, searchParams: string, stepId: string) 
   window.history.replaceState(window.history.state, "", nextUrl);
 }
 
+function isProposalRepairFieldId(
+  value: string | null
+): value is Exclude<ProposalCoachFieldId, "sandboxResult"> {
+  return Boolean(value && value in proposalStepByFieldId);
+}
+
 export function ProposalForm({ issues, ruleSets, action, initial, intentLabel }: ProposalFormProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -157,6 +183,10 @@ export function ProposalForm({ issues, ruleSets, action, initial, intentLabel }:
   const stepSyncRef = useRef(false);
   const autosaveReadyRef = useRef(false);
   const currentStepQuery = searchParams.get("step");
+  const beginnerMode = searchParams.get("beginner") === "1";
+  const repairQuery = searchParams.get("repair");
+  const repairFieldId = isProposalRepairFieldId(repairQuery) ? repairQuery : null;
+  const repairStepId = repairFieldId ? proposalStepByFieldId[repairFieldId] : null;
   const [draftId, setDraftId] = useState(initial?.id ?? "");
   const [values, setValues] = useState<ProposalCoachValues>(() =>
     createInitialProposalCoachValues({
@@ -199,7 +229,7 @@ export function ProposalForm({ issues, ruleSets, action, initial, intentLabel }:
   });
 
   const [currentStepId, setCurrentStepId] = useState<ProposalCoachStepId>(() =>
-    resolveStep(currentStepQuery, assessment.firstIncompleteStepId)
+    repairStepId ?? resolveStep(currentStepQuery, assessment.firstIncompleteStepId)
   );
 
   const currentStepIndex = proposalCoachStepOrder.indexOf(currentStepId);
@@ -222,19 +252,39 @@ export function ProposalForm({ issues, ruleSets, action, initial, intentLabel }:
   useEffect(() => {
     if (!stepSyncRef.current) {
       stepSyncRef.current = true;
-      const requestedStep = resolveStep(currentStepQuery, assessment.firstIncompleteStepId);
+      const requestedStep =
+        repairStepId ?? resolveStep(currentStepQuery, assessment.firstIncompleteStepId);
       setCurrentStepId(requestedStep);
       return;
     }
 
-    if (isProposalCoachStepId(currentStepQuery) && currentStepQuery !== currentStepId) {
-      setCurrentStepId(currentStepQuery);
+    const requestedStep =
+      repairStepId ?? resolveStep(currentStepQuery, assessment.firstIncompleteStepId);
+
+    if (requestedStep !== currentStepId) {
+      setCurrentStepId(requestedStep);
     }
-  }, [assessment.firstIncompleteStepId, currentStepId, currentStepQuery]);
+  }, [assessment.firstIncompleteStepId, currentStepId, currentStepQuery, repairStepId]);
 
   useEffect(() => {
     replaceStepUrl(pathname, searchParams.toString(), currentStepId);
   }, [currentStepId, pathname, searchParams]);
+
+  useEffect(() => {
+    if (!repairFieldId || !repairStepId) {
+      return;
+    }
+
+    if (repairStepId !== currentStepId) {
+      setCurrentStepId(repairStepId);
+      return;
+    }
+
+    window.setTimeout(() => {
+      const element = document.getElementById(getProposalCoachDomId(repairFieldId));
+      element?.focus();
+    }, 40);
+  }, [currentStepId, repairFieldId, repairStepId]);
 
   const performAutosave = useCallback(async () => {
     if (!hasAnyDraftContent(values, sandboxResult) && !draftId) {
@@ -260,7 +310,9 @@ export function ProposalForm({ issues, ruleSets, action, initial, intentLabel }:
       if (result.id && result.id !== draftId) {
         setDraftId(result.id);
         if (!initial?.id && result.editUrl) {
-          router.replace(`${result.editUrl}?step=${currentStepId}`, { scroll: false });
+          const params = new URLSearchParams(searchParams.toString());
+          params.set("step", currentStepId);
+          router.replace(`${result.editUrl}?${params.toString()}`, { scroll: false });
         }
       }
 
@@ -274,7 +326,7 @@ export function ProposalForm({ issues, ruleSets, action, initial, intentLabel }:
         message: error instanceof Error ? error.message : "Autosave failed."
       });
     }
-  }, [currentStepId, draftId, initial?.id, router, sandboxResult, values]);
+  }, [currentStepId, draftId, initial?.id, router, sandboxResult, searchParams, values]);
 
   useEffect(() => {
     if (!autosaveReadyRef.current) {
@@ -632,6 +684,16 @@ export function ProposalForm({ issues, ruleSets, action, initial, intentLabel }:
         completedSteps={completedSteps}
         totalSteps={proposalCoachStepOrder.length}
         currentStepName={proposalCoachSteps[currentStepId].shortTitle}
+        coachPanel={{
+          activeLabel: currentStep.title,
+          rightNow: currentStep.rightNow,
+          whyItMatters: currentStep.whyItMatters,
+          nextMove: currentStepEvaluation.nextMove,
+          missingItems: currentStepEvaluation.missingItems,
+          strongExample: currentStep.strongExample,
+          beginnerMode,
+          repairLabel: repairFieldId ? assessment.fields[repairFieldId].label : null
+        }}
         rail={<WizardStepRail items={railItems} onSelect={selectFromRail} />}
         footer={
           <WizardFooter

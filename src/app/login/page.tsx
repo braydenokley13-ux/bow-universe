@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 
 import { Badge } from "@/components/badge";
 import { LoginForm } from "@/components/login-form";
@@ -8,7 +9,7 @@ import { getViewer } from "@/server/auth";
 export default async function LoginPage({
   searchParams
 }: {
-  searchParams?: Promise<{ email?: string; activated?: string }>;
+  searchParams?: Promise<{ email?: string; activated?: string; signedUp?: string }>;
 }) {
   const viewer = await getViewer();
   const resolvedSearchParams = (await searchParams) ?? {};
@@ -23,7 +24,7 @@ export default async function LoginPage({
         <SectionHeading
           eyebrow="Access"
           title="Sign in to the research terminal"
-          description="Credentials auth is live. Use a seeded demo account or a commissioner-created student account to enter the research terminal."
+          description="Credentials auth is live. Use a seeded demo account, a commissioner-created student account, or a class-code signup account to enter the research terminal."
         />
 
         <div className="panel p-6">
@@ -59,8 +60,22 @@ export default async function LoginPage({
           </div>
         ) : null}
 
+        {resolvedSearchParams.signedUp === "1" ? (
+          <div className="mt-5 rounded-2xl border border-success/30 bg-success/10 px-4 py-3 text-sm text-success">
+            Account created. Sign in with the email and password you just set.
+          </div>
+        ) : null}
+
         <div className="mt-6">
           <LoginForm defaultEmail={resolvedSearchParams.email} />
+        </div>
+
+        <div className="mt-5 text-sm text-ink/65">
+          Need a new student account?{" "}
+          <Link href="/signup" className="font-medium text-accent">
+            Sign up with a class code
+          </Link>
+          .
         </div>
       </section>
     </div>

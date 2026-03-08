@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Badge } from "@/components/badge";
 import { SectionHeading } from "@/components/section-heading";
 import { classifyIssueWorkGap, summarizeIssuesFilter } from "@/lib/discovery-guidance";
+import { buildProjectStudioHref, buildProposalStudioHref } from "@/lib/studio-entry";
 import { parseIssueMetrics, getIssuesPageData } from "@/server/data";
 
 function toneForSeverity(severity: number) {
@@ -141,13 +142,16 @@ export default async function IssuesPage({
 
               <div className="mt-5 flex flex-wrap gap-3">
                 <Link
-                  href={`/proposals/new?issueId=${issue.id}`}
+                  href={buildProposalStudioHref({ issueId: issue.id })}
                   className="rounded-full border border-accent bg-accent px-4 py-2 text-sm font-medium text-white"
                 >
                   Draft proposal
                 </Link>
                 <Link
-                  href="/projects/new"
+                  href={buildProjectStudioHref({
+                    issueId: issue.id,
+                    teamId: issue.team?.id ?? null
+                  })}
                   className="rounded-full border border-line bg-white/80 px-4 py-2 text-sm font-medium text-ink"
                 >
                   Start project

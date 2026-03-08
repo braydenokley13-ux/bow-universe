@@ -206,7 +206,7 @@ export function getLanePrompt(lane: LaneTag) {
     case "TOOL_BUILDERS":
       return "Best when you want to build a tool, calculator, or reusable decision aid.";
     case "POLICY_REFORM_ARCHITECTS":
-      return "Best when you want to argue for a rule change and defend it with evidence.";
+      return "Best when you want to build reform support work like evidence maps, impact briefs, or structured support for a future memo.";
     case "STRATEGIC_OPERATORS":
       return "Best when you want a team plan with concrete year-by-year moves.";
     default:

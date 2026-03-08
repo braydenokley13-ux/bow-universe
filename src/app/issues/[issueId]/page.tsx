@@ -7,6 +7,7 @@ import { Breadcrumb } from "@/components/breadcrumb";
 import { NextActionCard } from "@/components/next-action-card";
 import { SectionHeading } from "@/components/section-heading";
 import { classifyIssueWorkGap } from "@/lib/discovery-guidance";
+import { buildProjectStudioHref, buildProposalStudioHref } from "@/lib/studio-entry";
 import { parseIssueMetrics, getIssuePageData } from "@/server/data";
 
 function metricMeaning(label: string, value: number | null | undefined) {
@@ -34,9 +35,12 @@ export default async function IssueDetailPage({ params }: { params: Promise<{ is
   });
   const nextHref =
     gap.missing[0] === "proposal memo"
-      ? `/proposals/new?issueId=${issue.id}`
+      ? buildProposalStudioHref({ issueId: issue.id })
       : gap.missing[0] === "supporting project"
-        ? `/projects/new`
+        ? buildProjectStudioHref({
+            issueId: issue.id,
+            teamId: issue.team?.id ?? null
+          })
         : issue.proposals[0]
           ? `/proposals/${issue.proposals[0].id}`
           : issue.projectLinks[0]

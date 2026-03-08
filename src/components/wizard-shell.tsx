@@ -8,6 +8,16 @@ type WizardShellProps = {
   completedSteps: number;
   totalSteps: number;
   currentStepName?: string;
+  coachPanel?: {
+    activeLabel?: string;
+    rightNow: string;
+    whyItMatters: string;
+    nextMove: string;
+    missingItems: string[];
+    strongExample: string;
+    beginnerMode?: boolean;
+    repairLabel?: string | null;
+  };
   rail: ReactNode;
   children: ReactNode;
   footer: ReactNode;
@@ -49,6 +59,7 @@ export function WizardShell({
   completedSteps,
   totalSteps,
   currentStepName,
+  coachPanel,
   rail,
   children,
   footer
@@ -92,6 +103,69 @@ export function WizardShell({
         <div className="mt-4">
           <div className={autosave.className}>{autosave.text}</div>
         </div>
+
+        {coachPanel ? (
+          <div className="mt-5 grid gap-4 lg:grid-cols-[1.08fr_0.92fr]">
+            <section className="rounded-[24px] border border-accent/20 bg-accent/5 p-5">
+              <div className="flex flex-wrap items-center gap-2">
+                {coachPanel.activeLabel ? (
+                  <span className="rounded-full border border-accent/30 bg-white/70 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.18em] text-accent">
+                    {coachPanel.activeLabel}
+                  </span>
+                ) : null}
+                {coachPanel.beginnerMode ? (
+                  <span className="rounded-full border border-success/30 bg-success/10 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.18em] text-success">
+                    Beginner mode
+                  </span>
+                ) : null}
+                {coachPanel.repairLabel ? (
+                  <span className="rounded-full border border-warn/30 bg-warn/10 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.18em] text-warn">
+                    Repairing {coachPanel.repairLabel}
+                  </span>
+                ) : null}
+              </div>
+
+              <div className="mt-4 space-y-4">
+                <div>
+                  <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Right now</p>
+                  <p className="mt-2 text-sm leading-6 text-ink/72">{coachPanel.rightNow}</p>
+                </div>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Why it matters</p>
+                    <p className="mt-2 text-sm leading-6 text-ink/68">{coachPanel.whyItMatters}</p>
+                  </div>
+                  <div>
+                    <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Next move</p>
+                    <p className="mt-2 text-sm leading-6 text-ink/68">{coachPanel.nextMove}</p>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-[24px] border border-line bg-white/70 p-5">
+              <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Repair guide</p>
+              {coachPanel.missingItems.length > 0 ? (
+                <ul className="mt-3 space-y-2 text-sm leading-6 text-ink/70">
+                  {coachPanel.missingItems.slice(0, 3).map((item) => (
+                    <li key={item} className="rounded-2xl border border-line bg-mist/40 px-3 py-2">
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="mt-3 text-sm leading-6 text-ink/62">
+                  No blockers on this step right now. Tighten the language and keep the section coherent.
+                </p>
+              )}
+
+              <div className="mt-4 rounded-2xl border border-line bg-white/85 px-4 py-3">
+                <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Strong example</p>
+                <p className="mt-2 text-sm leading-6 text-ink/68">{coachPanel.strongExample}</p>
+              </div>
+            </section>
+          </div>
+        ) : null}
       </section>
 
       <div className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)]">

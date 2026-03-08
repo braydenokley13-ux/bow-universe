@@ -9,6 +9,8 @@ import { SignOutButton } from "./sign-out-button";
 const navItems = [
   { href: "/", label: "Dashboard" },
   { href: "/start", label: "Start here" },
+  { href: "/news", label: "News" },
+  { href: "/challenges", label: "Challenges" },
   { href: "/teams", label: "Teams" },
   { href: "/rules", label: "Rules" },
   { href: "/issues", label: "Issues" },
@@ -50,12 +52,20 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
                     </span>
                   </div>
                   {viewer.role === "STUDENT" && (
-                    <Link
-                      href="/"
-                      className="rounded-full border border-accent px-4 py-2 text-sm font-medium text-accent transition hover:bg-accent hover:text-white"
-                    >
-                      My Work
-                    </Link>
+                    <>
+                      <Link
+                        href="/"
+                        className="rounded-full border border-accent px-4 py-2 text-sm font-medium text-accent transition hover:bg-accent hover:text-white"
+                      >
+                        Mission control
+                      </Link>
+                      <Link
+                        href="/students/me"
+                        className="rounded-full border border-line bg-white/70 px-4 py-2 text-sm font-medium text-ink transition hover:border-accent"
+                      >
+                        Portfolio
+                      </Link>
+                    </>
                   )}
                   <SignOutButton />
                 </>

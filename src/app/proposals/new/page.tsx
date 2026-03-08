@@ -3,13 +3,20 @@ import Link from "next/link";
 import { Badge } from "@/components/badge";
 import { ProposalForm } from "@/components/proposal-form";
 import { SectionHeading } from "@/components/section-heading";
+import { parseProposalStudioPrefill } from "@/lib/studio-entry";
 import { createProposalAction } from "@/server/actions";
 import { getViewer } from "@/server/auth";
 import { getProposalCreateData } from "@/server/data";
 
-export default async function NewProposalPage() {
+export default async function NewProposalPage({
+  searchParams
+}: {
+  searchParams?: Promise<{ issueId?: string }>;
+}) {
   const viewer = await getViewer();
   const { issues, ruleSets } = await getProposalCreateData();
+  const resolvedSearchParams = (await searchParams) ?? {};
+  const prefill = parseProposalStudioPrefill(resolvedSearchParams);
 
   return (
     <div className="space-y-8">
@@ -29,6 +36,26 @@ export default async function NewProposalPage() {
             ruleSets={ruleSets}
             action={createProposalAction}
             intentLabel="Submit for review"
+            initial={{
+              title: "",
+              issueId: prefill.issueId,
+              ruleSetId: ruleSets[0]?.id ?? "",
+              abstract: "",
+              methodsSummary: "",
+              problem: "",
+              currentRuleContext: "",
+              proposedChange: "",
+              impactAnalysis: "",
+              tradeoffs: "",
+              sandboxInterpretation: "",
+              recommendation: "",
+              diffJson: "",
+              referencesText: "",
+              keywordsText: "",
+              keyTakeawaysText: "",
+              publicationSlug: "",
+              sandboxResult: null
+            }}
           />
         </div>
       ) : (

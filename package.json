@@ -7,8 +7,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
+    "check": "npm run lint && npm test && npm run build && npm run prisma:validate",
+    "db:start": "pg_ctl -D .postgres/data -l .postgres/logs/server.log -o \"-c shared_memory_type=mmap -c dynamic_shared_memory_type=posix\" start",
+    "db:stop": "pg_ctl -D .postgres/data stop",
+    "db:status": "pg_ctl -D .postgres/data status",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate deploy",
+    "prisma:validate": "prisma validate",
     "prisma:seed": "tsx prisma/seed.ts",
     "test": "vitest run"
   },
