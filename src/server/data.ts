@@ -785,3 +785,139 @@ export async function getStudentDashboardData(userId: string) {
 
   return { openProjects, openProposals };
 }
+
+export async function getTeamHistoryData(teamId: string) {
+  return prisma.teamSeason.findMany({
+    where: { teamId },
+    include: { season: true },
+    orderBy: { season: { year: "asc" } }
+  });
+}
+
+export async function getLeagueHistoryData() {
+  const seasons = await prisma.season.findMany({
+    orderBy: { year: "asc" },
+    include: {
+      teamSeasons: {
+        include: { team: true }
+      }
+    }
+  });
+  return seasons;
+}
+
+export async function getChronicleData(limit = 20) {
+  return prisma.chronicleArticle.findMany({
+    orderBy: { publishedAt: "desc" },
+    take: limit,
+    include: { season: true, team: true }
+  });
+}
+
+export async function getSandboxPageData() {
+  const ruleSets = await prisma.ruleSet.findMany({
+    where: { isActive: true },
+    orderBy: { version: "desc" }
+  });
+  return { ruleSets };
+}
+
+export async function getUserSandboxScenarios(userId: string) {
+  return prisma.sandboxScenario.findMany({
+    where: { createdByUserId: userId },
+    orderBy: { updatedAt: "desc" },
+    include: { ruleSet: true }
+  });
+}
+
+export async function getPublicSandboxScenarios() {
+  return prisma.sandboxScenario.findMany({
+    where: { isPublic: true },
+    orderBy: { createdAt: "desc" },
+    include: {
+      createdBy: { select: { name: true } },
+      ruleSet: true
+    }
+  });
+}
+
+// ── Glossary ──────────────────────────────────────────────────────────────────
+
+export async function getAllGlossaryTerms() {
+  return prisma.glossaryTerm.findMany({
+    orderBy: [{ sortOrder: "asc" }, { term: "asc" }]
+  });
+}
+
+export async function getGlossaryTerm(slug: string) {
+  return prisma.glossaryTerm.findUnique({ where: { slug } });
+}
+
+// ── Cohorts ───────────────────────────────────────────────────────────────────
+
+export async function getAllCohorts() {
+  return prisma.cohort.findMany({
+    orderBy: { createdAt: "asc" },
+    include: {
+      members: { include: { user: { select: { id: true, name: true, email: true, linkedTeamId: true } } } },
+      milestones: { orderBy: { targetDate: "asc" } }
+    }
+  });
+}
+
+export async function getCohort(cohortId: string) {
+  return prisma.cohort.findUnique({
+    where: { id: cohortId },
+    include: {
+      members: { include: { user: { select: { id: true, name: true, email: true, role: true, linkedTeamId: true, linkedTeam: { select: { name: true } } } } } },
+      milestones: { orderBy: { targetDate: "asc" } }
+    }
+  });
+}
+
+export async function getCohortProgress(cohortId: string) {
+  const cohort = await prisma.cohort.findUnique({
+    where: { id: cohortId },
+    include: {
+      members: true,
+      milestones: { orderBy: { targetDate: "asc" } }
+    }
+  });
+  if (!cohort) return null;
+
+  const memberIds = cohort.members.map((m) => m.userId);
+
+  const [users, projects, proposals] = await Promise.all([
+    prisma.user.findMany({
+      where: { id: { in: memberIds } },
+      select: { id: true, name: true, email: true, linkedTeam: { select: { name: true } } }
+    }),
+    prisma.project.findMany({
+      where: { createdByUserId: { in: memberIds } },
+      select: { id: true, title: true, submissionStatus: true, createdByUserId: true, updatedAt: true }
+    }),
+    prisma.proposal.findMany({
+      where: { createdByUserId: { in: memberIds } },
+      select: { id: true, title: true, status: true, createdByUserId: true, updatedAt: true }
+    })
+  ]);
+
+  const rows = users.map((user) => {
+    const userProjects = projects.filter((p) => p.createdByUserId === user.id);
+    const userProposals = proposals.filter((p) => p.createdByUserId === user.id);
+    const lastActivity = [...userProjects, ...userProposals]
+      .map((x) => x.updatedAt)
+      .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
+
+    return {
+      user,
+      projects: userProjects,
+      proposals: userProposals,
+      totalWork: userProjects.length + userProposals.length,
+      hasNoActivity: userProjects.length === 0 && userProposals.length === 0,
+      lastActivity
+    };
+  });
+
+  return { cohort, rows, milestones: cohort.milestones };
+}

@@ -1433,4 +1433,224 @@ export async function advanceSeasonAction() {
   revalidatePath("/issues");
   revalidatePath("/rules");
   revalidatePath("/proposals");
+  revalidatePath("/chronicle");
+}
+
+const saveSandboxScenarioSchema = z.object({
+  name: z.string().min(1).max(120),
+  description: z.string().max(500).optional(),
+  diffJson: z.string().min(2),
+  resultJson: z.string().min(2).optional(),
+  ruleSetId: z.string().min(1),
+  isPublic: z.boolean().default(false)
+});
+
+export async function saveSandboxScenarioAction(formData: FormData) {
+  const viewer = await requireUser();
+  const raw = {
+    name: String(formData.get("name") ?? ""),
+    description: String(formData.get("description") ?? "") || undefined,
+    diffJson: String(formData.get("diffJson") ?? ""),
+    resultJson: String(formData.get("resultJson") ?? "") || undefined,
+    ruleSetId: String(formData.get("ruleSetId") ?? ""),
+    isPublic: formData.get("isPublic") === "true"
+  };
+
+  const parsed = saveSandboxScenarioSchema.parse(raw);
+
+  await prisma.sandboxScenario.create({
+    data: {
+      name: parsed.name,
+      description: parsed.description ?? null,
+      diffJson: JSON.parse(parsed.diffJson) as Prisma.InputJsonValue,
+      resultJson: parsed.resultJson
+        ? (JSON.parse(parsed.resultJson) as Prisma.InputJsonValue)
+        : Prisma.JsonNull,
+      ruleSetId: parsed.ruleSetId,
+      createdByUserId: viewer.id,
+      isPublic: parsed.isPublic
+    }
+  });
+
+  revalidatePath("/sandbox");
+}
+
+export async function deleteSandboxScenarioAction(formData: FormData) {
+  const viewer = await requireUser();
+  const scenarioId = String(formData.get("scenarioId") ?? "");
+  if (!scenarioId) return;
+
+  const scenario = await prisma.sandboxScenario.findUnique({ where: { id: scenarioId } });
+  if (!scenario || scenario.createdByUserId !== viewer.id) {
+    throw new Error("Not authorized to delete this scenario.");
+  }
+
+  await prisma.sandboxScenario.delete({ where: { id: scenarioId } });
+  revalidatePath("/sandbox");
+}
+
+export async function updateSandboxScenarioAction(formData: FormData) {
+  const viewer = await requireUser();
+  const scenarioId = String(formData.get("scenarioId") ?? "");
+  if (!scenarioId) return;
+
+  const scenario = await prisma.sandboxScenario.findUnique({ where: { id: scenarioId } });
+  if (!scenario || scenario.createdByUserId !== viewer.id) {
+    throw new Error("Not authorized to update this scenario.");
+  }
+
+  const name = String(formData.get("name") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim() || null;
+  const isPublic = formData.get("isPublic") === "true";
+
+  await prisma.sandboxScenario.update({
+    where: { id: scenarioId },
+    data: { name: name || scenario.name, description, isPublic }
+  });
+
+  revalidatePath("/sandbox");
+}
+
+// ── Glossary actions ──────────────────────────────────────────────────────────
+
+const glossaryTermSchema = z.object({
+  id: z.string().optional(),
+  slug: z.string().min(1).max(80).regex(/^[a-z0-9-]+$/),
+  term: z.string().min(2).max(100),
+  definition: z.string().min(10).max(1000),
+  bowExample: z.string().max(500).optional(),
+  category: z.string().max(60).optional(),
+  sortOrder: z.coerce.number().int().default(0)
+});
+
+export async function saveGlossaryTermAction(formData: FormData) {
+  await requireAdmin();
+  const raw = {
+    id: String(formData.get("id") ?? "").trim() || undefined,
+    slug: String(formData.get("slug") ?? "").trim(),
+    term: String(formData.get("term") ?? "").trim(),
+    definition: String(formData.get("definition") ?? "").trim(),
+    bowExample: String(formData.get("bowExample") ?? "").trim() || undefined,
+    category: String(formData.get("category") ?? "").trim() || undefined,
+    sortOrder: String(formData.get("sortOrder") ?? "0")
+  };
+  const parsed = glossaryTermSchema.parse(raw);
+
+  await prisma.glossaryTerm.upsert({
+    where: { slug: parsed.slug },
+    update: {
+      term: parsed.term,
+      definition: parsed.definition,
+      bowExample: parsed.bowExample ?? null,
+      category: parsed.category ?? null,
+      sortOrder: parsed.sortOrder
+    },
+    create: {
+      slug: parsed.slug,
+      term: parsed.term,
+      definition: parsed.definition,
+      bowExample: parsed.bowExample ?? null,
+      category: parsed.category ?? null,
+      sortOrder: parsed.sortOrder
+    }
+  });
+
+  revalidatePath("/glossary");
+  revalidatePath("/admin");
+  revalidatePath("/api/glossary");
+}
+
+export async function deleteGlossaryTermAction(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return;
+  await prisma.glossaryTerm.delete({ where: { id } });
+  revalidatePath("/glossary");
+  revalidatePath("/admin");
+}
+
+// ── Cohort actions ────────────────────────────────────────────────────────────
+
+export async function createCohortAction(formData: FormData) {
+  const viewer = await requireAdmin();
+  const name = String(formData.get("name") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim() || null;
+  if (!name) return;
+  await prisma.cohort.create({ data: { name, description, createdByUserId: viewer.id } });
+  revalidatePath("/admin/cohorts");
+}
+
+export async function updateCohortAction(formData: FormData) {
+  await requireAdmin();
+  const cohortId = String(formData.get("cohortId") ?? "").trim();
+  const name = String(formData.get("name") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim() || null;
+  if (!cohortId || !name) return;
+  await prisma.cohort.update({ where: { id: cohortId }, data: { name, description } });
+  revalidatePath("/admin/cohorts");
+  revalidatePath(`/admin/cohorts/${cohortId}`);
+}
+
+export async function deleteCohortAction(formData: FormData) {
+  await requireAdmin();
+  const cohortId = String(formData.get("cohortId") ?? "").trim();
+  if (!cohortId) return;
+  await prisma.cohort.delete({ where: { id: cohortId } });
+  revalidatePath("/admin/cohorts");
+}
+
+export async function addCohortMemberAction(formData: FormData) {
+  await requireAdmin();
+  const cohortId = String(formData.get("cohortId") ?? "").trim();
+  const userId = String(formData.get("userId") ?? "").trim();
+  if (!cohortId || !userId) return;
+  await prisma.cohortMember.upsert({
+    where: { cohortId_userId: { cohortId, userId } },
+    update: {},
+    create: { cohortId, userId }
+  });
+  revalidatePath(`/admin/cohorts/${cohortId}`);
+}
+
+export async function removeCohortMemberAction(formData: FormData) {
+  await requireAdmin();
+  const cohortId = String(formData.get("cohortId") ?? "").trim();
+  const userId = String(formData.get("userId") ?? "").trim();
+  if (!cohortId || !userId) return;
+  await prisma.cohortMember.delete({ where: { cohortId_userId: { cohortId, userId } } });
+  revalidatePath(`/admin/cohorts/${cohortId}`);
+}
+
+export async function saveCohortMilestoneAction(formData: FormData) {
+  await requireAdmin();
+  const cohortId = String(formData.get("cohortId") ?? "").trim();
+  const milestoneId = String(formData.get("milestoneId") ?? "").trim() || undefined;
+  const label = String(formData.get("label") ?? "").trim();
+  const targetDate = String(formData.get("targetDate") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim() || null;
+  if (!cohortId || !label || !targetDate) return;
+
+  const date = new Date(targetDate);
+  if (isNaN(date.getTime())) return;
+
+  if (milestoneId) {
+    await prisma.cohortMilestone.update({
+      where: { id: milestoneId },
+      data: { label, targetDate: date, description }
+    });
+  } else {
+    await prisma.cohortMilestone.create({
+      data: { cohortId, label, targetDate: date, description }
+    });
+  }
+  revalidatePath(`/admin/cohorts/${cohortId}`);
+}
+
+export async function deleteCohortMilestoneAction(formData: FormData) {
+  await requireAdmin();
+  const milestoneId = String(formData.get("milestoneId") ?? "").trim();
+  const cohortId = String(formData.get("cohortId") ?? "").trim();
+  if (!milestoneId) return;
+  await prisma.cohortMilestone.delete({ where: { id: milestoneId } });
+  revalidatePath(`/admin/cohorts/${cohortId}`);
 }

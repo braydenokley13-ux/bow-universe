@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { getViewer } from "@/server/auth";
-
+import { GlossaryPanel } from "./glossary-panel";
 import { MainNav } from "./main-nav";
 import { MobileNav } from "./mobile-nav";
 import { SignOutButton } from "./sign-out-button";
@@ -15,6 +15,9 @@ const navItems = [
   { href: "/projects", label: "Projects" },
   { href: "/proposals", label: "Proposals" },
   { href: "/research", label: "Research" },
+  { href: "/chronicle", label: "Chronicle" },
+  { href: "/sandbox", label: "Sandbox" },
+  { href: "/glossary", label: "Glossary" },
   { href: "/admin", label: "Admin" }
 ];
 
@@ -80,6 +83,8 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
       <main className="mx-auto flex max-w-7xl flex-col gap-8 px-4 py-8 lg:px-8 print:max-w-none print:px-0 print:py-0">
         {children}
       </main>
+
+      <GlossaryPanel />
     </div>
   );
 }

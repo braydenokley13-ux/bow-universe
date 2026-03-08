@@ -10,8 +10,10 @@ import { prisma } from "@/lib/prisma";
 import { formatCompactCurrency } from "@/lib/utils";
 import { advanceSeasonAction } from "@/server/actions";
 import { getViewer } from "@/server/auth";
+import { ChronicleArticleCard } from "@/components/chronicle-article-card";
 import {
   getDashboardData,
+  getChronicleData,
   getIssuesPageData,
   getProjectsPageData,
   getProposalsPageData,
@@ -101,13 +103,15 @@ export default async function HomePage() {
     { projects },
     proposals,
     issues,
-    publications
+    publications,
+    latestChronicle
   ] = await Promise.all([
     getDashboardData(),
     getProjectsPageData(),
     getProposalsPageData(),
     getIssuesPageData(),
-    getResearchPageData()
+    getResearchPageData(),
+    getChronicleData(3)
   ]);
   const topTaxTeams = [...latestTeamSeasons].sort((a, b) => b.taxPaid - a.taxPaid).slice(0, 3);
   const guidance = buildDashboardGuidance({
@@ -243,6 +247,41 @@ export default async function HomePage() {
           </div>
         </article>
       </section>
+
+      {latestChronicle.length > 0 && (
+        <section className="space-y-4">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <p className="font-mono text-xs uppercase tracking-[0.28em] text-accent">League Chronicle</p>
+              <h3 className="mt-2 font-display text-2xl text-ink">Latest league news</h3>
+              <p className="mt-1 text-sm leading-6 text-ink/68">
+                Auto-generated news from the simulation engine — plain-language context for student research.
+              </p>
+            </div>
+            <Link href="/chronicle" className="shrink-0 rounded-full border border-line bg-white/70 px-4 py-2 text-sm font-medium text-ink hover:border-accent">
+              All articles →
+            </Link>
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            {latestChronicle.map((article) => (
+              <ChronicleArticleCard
+                key={article.id}
+                id={article.id}
+                headline={article.headline}
+                body={article.body}
+                category={article.category}
+                seasonYear={article.season?.year}
+                teamName={article.team?.name}
+                teamId={article.teamId}
+                entityType={article.entityType}
+                entityId={article.entityId}
+                publishedAt={article.publishedAt}
+                compact
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="panel p-6">
         <div className="flex items-center justify-between gap-3">
