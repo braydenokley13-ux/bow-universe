@@ -3,16 +3,16 @@
 @tailwind utilities;
 
 :root {
-  --font-display: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Palatino, Georgia, serif;
-  --font-body: "Avenir Next", "Segoe UI", Helvetica, Arial, sans-serif;
-  --font-mono: "IBM Plex Mono", "SFMono-Regular", Menlo, monospace;
+  --font-display: "Plus Jakarta Sans Variable", "Plus Jakarta Sans", system-ui, sans-serif;
+  --font-body:    "InterVariable", "Inter", system-ui, sans-serif;
+  --font-mono:    "IBM Plex Mono", "SFMono-Regular", Menlo, monospace;
 }
 
 html {
-  background-color: #f0ead8;
+  background-color: #f8f9fb;
   background-image:
-    radial-gradient(ellipse 90% 55% at 10% -5%, rgba(68, 96, 109, 0.14) 0%, transparent 55%),
-    radial-gradient(ellipse 70% 45% at 90% 105%, rgba(68, 96, 109, 0.08) 0%, transparent 55%);
+    radial-gradient(ellipse 90% 55% at 10% -5%, rgba(99,102,241,0.08) 0%, transparent 55%),
+    radial-gradient(ellipse 70% 45% at 90% 105%, rgba(99,102,241,0.05) 0%, transparent 55%);
   background-attachment: fixed;
 }
 
@@ -26,7 +26,7 @@ a {
 }
 
 ::selection {
-  background: rgba(68, 96, 109, 0.22);
+  background: rgba(99, 102, 241, 0.22);
 }
 
 /* Subtle scrollbar */
@@ -38,17 +38,17 @@ a {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: #c8c0b0;
+  background: #cbd5e1;
   border-radius: 99px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #a8a098;
+  background: #94a3b8;
 }
 
 /* Focus ring */
 :focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(68, 96, 109, 0.45);
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.55);
 }
 
 .metric-grid {
@@ -56,13 +56,13 @@ a {
 }
 
 .panel {
-  @apply rounded-2xl border border-line/60 bg-panel/95;
-  box-shadow: 0 1px 2px rgba(32, 48, 60, 0.04), 0 6px 20px rgba(32, 48, 60, 0.07);
+  @apply rounded-2xl border border-line bg-panel;
+  box-shadow: 0 1px 3px rgba(15,23,42,0.06), 0 8px 24px rgba(15,23,42,0.10);
 }
 
 .table-shell {
-  @apply overflow-hidden rounded-2xl border border-line/60 bg-panel/95;
-  box-shadow: 0 1px 2px rgba(32, 48, 60, 0.04), 0 6px 20px rgba(32, 48, 60, 0.07);
+  @apply overflow-hidden rounded-2xl border border-line bg-panel;
+  box-shadow: 0 1px 3px rgba(15,23,42,0.06), 0 8px 24px rgba(15,23,42,0.10);
 }
 
 @media print {

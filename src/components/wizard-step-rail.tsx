@@ -1,3 +1,5 @@
+import { Check } from "lucide-react";
+
 import { getStepStatusLabel, type CoachStepStatus } from "@/lib/coach-ui";
 
 type WizardStepRailProps<StepId extends string> = {
@@ -14,22 +16,22 @@ type WizardStepRailProps<StepId extends string> = {
 
 function toneForStatus(status: CoachStepStatus, current: boolean) {
   if (current) {
-    return "border-accent bg-accent text-white";
+    return "border-accent bg-accent text-white shadow-glow";
   }
 
   if (status === "done") {
-    return "border-success/20 bg-success/10 text-success";
+    return "border-success bg-success-soft text-success";
   }
 
   if (status === "strong") {
-    return "border-accent/20 bg-accent/10 text-accent";
+    return "border-accent/30 bg-accent-soft text-accent";
   }
 
   if (status === "needs_work") {
-    return "border-warn/20 bg-warn/10 text-warn";
+    return "border-warn bg-warn-soft text-warn";
   }
 
-  return "border-line bg-white/75 text-ink/68";
+  return "border-line bg-white text-ink/68";
 }
 
 export function WizardStepRail<StepId extends string>({
@@ -37,8 +39,8 @@ export function WizardStepRail<StepId extends string>({
   onSelect
 }: WizardStepRailProps<StepId>) {
   return (
-    <nav className="rounded-2xl border border-line/60 bg-panel/95 p-4" style={{boxShadow: "0 1px 2px rgba(32,48,60,0.04), 0 6px 20px rgba(32,48,60,0.07)"}}>
-      <p className="text-[11px] font-semibold uppercase tracking-wider text-accent/80">Your progress</p>
+    <nav className="panel p-4">
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-accent">Your progress</p>
       <div className="mt-4 space-y-2">
         {items.map((item, index) => (
           <button
@@ -50,13 +52,17 @@ export function WizardStepRail<StepId extends string>({
               item.disabled ? "cursor-not-allowed opacity-55" : "hover:border-accent"
             }`}
           >
-            <span className="mt-0.5 flex-shrink-0 rounded-full border border-current/30 bg-current/10 px-1.5 py-0.5 font-mono text-[10px] leading-none">
-              {String(index + 1).padStart(2, "0")}
+            <span className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full border border-current/30 bg-current/10 font-mono text-[10px] leading-none">
+              {item.status === "done" && !item.current ? (
+                <Check className="h-3 w-3" />
+              ) : (
+                String(index + 1).padStart(2, "0")
+              )}
             </span>
             <span className="min-w-0 flex-1">
               <span className="block text-sm font-semibold leading-5">{item.title}</span>
               {item.current ? (
-                <span className="mt-1 block text-xs leading-5 font-medium">→ You are here</span>
+                <span className="mt-1 block text-xs font-medium leading-5">→ You are here</span>
               ) : (
                 <span className="mt-1 block text-xs leading-5 opacity-80">
                   {getStepStatusLabel(item.status)}

@@ -209,3 +209,11 @@ export const publicationTypeLabels: Record<PublicationType, string> = {
   TEAM_STRATEGY_DOSSIER: "Team Strategy Dossier",
   RESEARCH_BRIEF: "Research Brief"
 };
+
+
+export const laneColorMap: Record<LaneTag, { bg: string; text: string; border: string }> = {
+  TOOL_BUILDERS:            { bg: "bg-lane-tool/10",     text: "text-lane-tool",     border: "border-lane-tool/30"     },
+  POLICY_REFORM_ARCHITECTS: { bg: "bg-lane-policy/10",   text: "text-lane-policy",   border: "border-lane-policy/30"   },
+  STRATEGIC_OPERATORS:      { bg: "bg-lane-strategy/10", text: "text-lane-strategy", border: "border-lane-strategy/30" },
+  ECONOMIC_INVESTIGATORS:   { bg: "bg-lane-econ/10",     text: "text-lane-econ",     border: "border-lane-econ/30"     }
+};

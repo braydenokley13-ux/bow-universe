@@ -42,7 +42,7 @@ export function MainNav({ items }: MainNavProps) {
   const pathname = usePathname();
 
   return (
-    <nav className="flex items-center gap-0.5">
+    <nav className="flex items-center gap-1">
       {items.map((item) => {
         const active =
           item.href === "/"
@@ -56,13 +56,13 @@ export function MainNav({ items }: MainNavProps) {
             key={item.href}
             href={item.href}
             className={cn(
-              "flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-[13px] font-medium transition-colors",
+              "flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-sm font-medium transition-colors",
               active
                 ? "bg-accent text-white"
-                : "text-ink/55 hover:bg-accent/10 hover:text-ink"
+                : "text-ink/70 hover:bg-mist hover:text-ink"
             )}
           >
-            {Icon && <Icon className="h-3.5 w-3.5 flex-shrink-0" />}
+            {Icon && <Icon className="h-4 w-4 flex-shrink-0" />}
             <span>{item.label}</span>
           </Link>
         );

@@ -56,7 +56,7 @@ export function MobileNav({ items }: { items: NavItem[] }) {
         aria-label={open ? "Close menu" : "Open menu"}
         aria-expanded={open}
         onClick={() => setOpen((prev) => !prev)}
-        className="flex h-8 w-8 items-center justify-center rounded-lg border border-line/70 bg-white/50 text-ink/60 transition hover:border-accent/60 hover:text-ink"
+        className="flex h-8 w-8 items-center justify-center rounded-lg border border-line bg-mist text-ink/65 transition hover:border-accent hover:text-ink"
       >
         {open ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
       </button>
@@ -65,7 +65,7 @@ export function MobileNav({ items }: { items: NavItem[] }) {
       {open && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setOpen(false)} />
-          <nav className="absolute right-0 top-10 z-50 min-w-[200px] overflow-hidden rounded-2xl border border-line/60 bg-panel/98 py-1.5 shadow-lg backdrop-blur-md">
+          <nav className="absolute right-0 top-10 z-50 min-w-[200px] overflow-hidden rounded-2xl border border-line bg-white py-1.5 shadow-card">
             {items.map((item) => {
               const active = isActive(item.href);
               const Icon = item.icon && item.icon in iconMap ? iconMap[item.icon] : null;
@@ -77,7 +77,7 @@ export function MobileNav({ items }: { items: NavItem[] }) {
                   className={`flex items-center gap-2.5 px-4 py-2.5 text-sm font-medium transition-colors ${
                     active
                       ? "bg-accent text-white"
-                      : "text-ink hover:bg-accent/8 hover:text-ink"
+                      : "text-ink/75 hover:bg-mist hover:text-ink"
                   }`}
                 >
                   {Icon && <Icon className="h-4 w-4 flex-shrink-0 opacity-70" />}

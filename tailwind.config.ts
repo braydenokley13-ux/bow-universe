@@ -9,25 +9,38 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        ink: "#20303c",
-        mist: "#f5f1e8",
-        panel: "#fbf8f2",
-        line: "#d8d1c2",
-        accent: "#44606d",
-        "accent-soft": "#d8e3e5",
-        success: "#58736a",
-        warn: "#8e6d4f",
-        danger: "#8d5d5d"
+        ink:            "#0f172a",
+        mist:           "#f8f9fb",
+        panel:          "#ffffff",
+        line:           "#e2e8f0",
+        accent:         "#6366f1",
+        "accent-soft":  "#e0e7ff",
+        "accent-vivid": "#4f46e5",
+        success:        "#16a34a",
+        "success-soft": "#dcfce7",
+        warn:           "#d97706",
+        "warn-soft":    "#fef3c7",
+        danger:         "#dc2626",
+        "danger-soft":  "#fee2e2",
+        info:           "#0284c7",
+        "info-soft":    "#e0f2fe",
+        lane: {
+          tool:     "#7c3aed",
+          policy:   "#0369a1",
+          strategy: "#0f766e",
+          econ:     "#b45309"
+        }
       },
       fontFamily: {
         display: ["var(--font-display)"],
-        body: ["var(--font-body)"],
-        mono: ["var(--font-mono)"]
+        body:    ["var(--font-body)"],
+        mono:    ["var(--font-mono)"]
       },
       boxShadow: {
-        panel: "0 1px 2px rgba(32, 48, 60, 0.04), 0 6px 20px rgba(32, 48, 60, 0.07)",
-        card: "0 2px 8px rgba(32, 48, 60, 0.08), 0 16px 40px rgba(32, 48, 60, 0.07)",
-        sm: "0 1px 3px rgba(32, 48, 60, 0.08)"
+        panel: "0 1px 3px rgba(15,23,42,0.06), 0 8px 24px rgba(15,23,42,0.10)",
+        card:  "0 2px 8px rgba(15,23,42,0.08), 0 20px 48px rgba(15,23,42,0.14)",
+        glow:  "0 0 0 1px rgba(99,102,241,0.15), 0 8px 24px rgba(99,102,241,0.12)",
+        sm:    "0 1px 4px rgba(15,23,42,0.10)"
       }
     }
   },

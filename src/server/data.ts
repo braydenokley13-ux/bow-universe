@@ -66,11 +66,41 @@ export async function getDashboardData() {
     take: 6
   });
 
+  // Multi-season trend data for charts
+  const allSeasons = await prisma.season.findMany({
+    orderBy: { year: "asc" },
+    include: { teamSeasons: { include: { team: true } } }
+  });
+
+  const seasonTrend = allSeasons.map((season) => {
+    const seasonMetrics = calculateLeagueMetrics(
+      season.teamSeasons.map((ts) => ({
+        teamId: ts.teamId,
+        teamName: ts.team.name,
+        payroll: ts.payroll,
+        taxPaid: ts.taxPaid,
+        revenue: ts.revenue,
+        valuation: ts.valuation,
+        performanceProxy: ts.performanceProxy,
+        marketSizeTier: ts.team.marketSizeTier,
+        rawRevenue: ts.revenue,
+        revenueSharingContribution: 0,
+        ownerDisciplineScore: ts.team.ownerDisciplineScore
+      }))
+    );
+    return {
+      label: `S${season.year}`,
+      parityIndex: Math.round(seasonMetrics.parityIndex * 100) / 100,
+      revenueInequality: Math.round(seasonMetrics.revenueInequality * 100) / 100
+    };
+  });
+
   return {
     currentSeason,
     metrics,
     activity,
-    latestTeamSeasons
+    latestTeamSeasons,
+    seasonTrend
   };
 }
 

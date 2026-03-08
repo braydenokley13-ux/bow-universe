@@ -1,5 +1,9 @@
 import type { Metadata } from "next";
 
+import "@fontsource-variable/plus-jakarta-sans";
+import "@fontsource-variable/inter";
+import "@fontsource/ibm-plex-mono/400.css";
+import "@fontsource/ibm-plex-mono/500.css";
 import "./globals.css";
 
 import { AppShell } from "@/components/app-shell";
