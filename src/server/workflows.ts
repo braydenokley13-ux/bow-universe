@@ -1,8 +1,13 @@
 import { IssueStatus, Prisma, ProposalStatus } from "@prisma/client";
 
+import {
+  generateIssueAlertArticle,
+  generateProposalDecisionArticle,
+  generateSeasonAdvanceArticles
+} from "@/lib/chronicle";
 import { prisma } from "@/lib/prisma";
 import { applyRuleDiff, diffRules, parseRuleDiff, parseRules } from "@/lib/rules";
-import { compareRuleOutcomes, deriveIssueAlerts, simulateSeason } from "@/lib/sim";
+import { calculateLeagueMetrics, compareRuleOutcomes, deriveIssueAlerts, simulateSeason } from "@/lib/sim";
 import type { LeagueRulesV1, RuleDiff, SandboxImpactReport, TeamSimulationInput } from "@/lib/types";
 
 type DatabaseClient = Prisma.TransactionClient | typeof prisma;
@@ -274,6 +279,31 @@ export async function applyDecisionToPendingRuleSetWorkflow(params: {
       }
     });
 
+    // Generate a chronicle article for approved/amended proposals
+    if (params.decision === "APPROVE" || params.decision === "AMEND") {
+      const chronicleArticle = generateProposalDecisionArticle(
+        proposal.id,
+        proposal.title,
+        proposal.issue.title,
+        params.decision,
+        params.notes
+      );
+      await tx.chronicleArticle.create({
+        data: {
+          headline: chronicleArticle.headline,
+          body: chronicleArticle.body,
+          category: chronicleArticle.category,
+          entityType: chronicleArticle.entityType ?? null,
+          entityId: chronicleArticle.entityId ?? null,
+          seasonId: null,
+          teamId: null,
+          metadataJson: chronicleArticle.metadataJson
+            ? (chronicleArticle.metadataJson as Prisma.InputJsonValue)
+            : Prisma.JsonNull
+        }
+      });
+    }
+
     return pendingRuleSetId;
   };
 
@@ -394,7 +424,33 @@ export async function advanceSeasonWorkflow(params: {
       }))
     });
 
+    // Retrieve previous season metrics for chronicle delta story
+    const prevSeason = await tx.season.findFirst({
+      where: { year: { lt: nextSeasonYear } },
+      orderBy: { year: "desc" },
+      include: { teamSeasons: { include: { team: true } } }
+    });
+    const prevMetrics = prevSeason && prevSeason.teamSeasons.length > 0
+      ? calculateLeagueMetrics(
+          prevSeason.teamSeasons.map((ts) => ({
+            teamId: ts.teamId,
+            teamName: ts.team.name,
+            payroll: ts.payroll,
+            taxPaid: ts.taxPaid,
+            revenue: ts.revenue,
+            valuation: ts.valuation,
+            performanceProxy: ts.performanceProxy,
+            marketSizeTier: ts.team.marketSizeTier,
+            rawRevenue: ts.revenue,
+            revenueSharingContribution: 0,
+            ownerDisciplineScore: ts.team.ownerDisciplineScore
+          }))
+        )
+      : null;
+
     const alerts = deriveIssueAlerts(simulation.metrics);
+
+    const issueArticles: Array<{ issueId: string; article: ReturnType<typeof generateIssueAlertArticle> }> = [];
 
     for (const alert of alerts) {
       const result = await upsertThresholdIssue(tx, {
@@ -414,6 +470,47 @@ export async function advanceSeasonWorkflow(params: {
         entityId: result.issueId,
         createdByUserId: params.actorUserId,
         metadata: alert.metrics
+      });
+
+      if (!result.reopened) {
+        issueArticles.push({
+          issueId: result.issueId,
+          article: generateIssueAlertArticle(result.issueId, alert.title, alert.description, alert.metrics)
+        });
+      }
+    }
+
+    // Generate chronicle articles for this season advance
+    const teamResultsForChronicle = simulation.teamResults.map((tr) => {
+      const team = teams.find((t) => t.id === tr.teamId);
+      return { ...tr, teamName: team?.name ?? tr.teamId };
+    });
+
+    const seasonArticles = generateSeasonAdvanceArticles(
+      nextSeasonYear,
+      season.id,
+      teamResultsForChronicle,
+      simulation.metrics,
+      prevMetrics
+    );
+
+    const allArticles = [
+      ...seasonArticles,
+      ...issueArticles.map((ia) => ia.article)
+    ];
+
+    if (allArticles.length > 0) {
+      await tx.chronicleArticle.createMany({
+        data: allArticles.map((article) => ({
+          headline: article.headline,
+          body: article.body,
+          category: article.category,
+          entityType: article.entityType ?? null,
+          entityId: article.entityId ?? null,
+          seasonId: article.seasonId ?? season.id,
+          teamId: article.teamId ?? null,
+          metadataJson: article.metadataJson ? (article.metadataJson as Prisma.InputJsonValue) : Prisma.JsonNull
+        }))
       });
     }
 

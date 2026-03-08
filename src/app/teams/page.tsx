@@ -30,11 +30,19 @@ export default async function TeamsPage() {
 
   return (
     <div className="space-y-8">
-      <SectionHeading
-        eyebrow="Teams"
-        title="League franchise index"
-        description={`The ${teams.length}-team universe is now loaded from Prisma for season ${currentSeason?.year ?? "-"}. Each entry links into a team dossier with contracts, finances, and strategy history.`}
-      />
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <SectionHeading
+          eyebrow="Teams"
+          title="League franchise index"
+          description={`The ${teams.length}-team universe is loaded for season ${currentSeason?.year ?? "-"}. Each entry links into a team dossier with contracts, finances, and strategy history.`}
+        />
+        <Link
+          href="/teams/history"
+          className="shrink-0 rounded-full border border-line bg-white/70 px-4 py-2 text-sm font-medium text-ink hover:border-accent"
+        >
+          League history →
+        </Link>
+      </div>
 
       <section className="table-shell">
         <div className="grid grid-cols-[1.8fr_0.9fr_1fr_1fr_1fr] gap-3 border-b border-line bg-mist/60 px-5 py-4 font-mono text-xs uppercase tracking-[0.2em] text-ink/55">

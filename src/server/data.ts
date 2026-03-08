@@ -785,3 +785,58 @@ export async function getStudentDashboardData(userId: string) {
 
   return { openProjects, openProposals };
 }
+
+export async function getTeamHistoryData(teamId: string) {
+  return prisma.teamSeason.findMany({
+    where: { teamId },
+    include: { season: true },
+    orderBy: { season: { year: "asc" } }
+  });
+}
+
+export async function getLeagueHistoryData() {
+  const seasons = await prisma.season.findMany({
+    orderBy: { year: "asc" },
+    include: {
+      teamSeasons: {
+        include: { team: true }
+      }
+    }
+  });
+  return seasons;
+}
+
+export async function getChronicleData(limit = 20) {
+  return prisma.chronicleArticle.findMany({
+    orderBy: { publishedAt: "desc" },
+    take: limit,
+    include: { season: true, team: true }
+  });
+}
+
+export async function getSandboxPageData() {
+  const ruleSets = await prisma.ruleSet.findMany({
+    where: { isActive: true },
+    orderBy: { version: "desc" }
+  });
+  return { ruleSets };
+}
+
+export async function getUserSandboxScenarios(userId: string) {
+  return prisma.sandboxScenario.findMany({
+    where: { createdByUserId: userId },
+    orderBy: { updatedAt: "desc" },
+    include: { ruleSet: true }
+  });
+}
+
+export async function getPublicSandboxScenarios() {
+  return prisma.sandboxScenario.findMany({
+    where: { isPublic: true },
+    orderBy: { createdAt: "desc" },
+    include: {
+      createdBy: { select: { name: true } },
+      ruleSet: true
+    }
+  });
+}

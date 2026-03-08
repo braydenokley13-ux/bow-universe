@@ -127,25 +127,27 @@ model User {
   publishedPublications Publication[]          @relation("PublicationPublishedBy")
   createdStudentInvites StudentInvite[]        @relation("StudentInviteCreatedBy")
   studentInvites        StudentInvite[]        @relation("StudentInviteUser")
+  sandboxScenarios      SandboxScenario[]      @relation("SandboxScenarioCreatedBy")
 
   @@index([linkedTeamId])
   @@index([commissionerId])
 }
 
 model Team {
-  id                   String       @id @default(cuid())
+  id                   String             @id @default(cuid())
   name                 String
-  slug                 String       @unique
+  slug                 String             @unique
   marketSizeTier       MarketSizeTier
   ownerProfile         String
   ownerDisciplineScore Float
-  createdAt            DateTime     @default(now())
+  createdAt            DateTime           @default(now())
   contracts            Contract[]
   teamSeasons          TeamSeason[]
   projects             Project[]
   issues               Issue[]
   publications         Publication[]
-  linkedStudents       User[]       @relation("LinkedStudentTeam")
+  linkedStudents       User[]             @relation("LinkedStudentTeam")
+  chronicleArticles    ChronicleArticle[]
 }
 
 model StudentInvite {
@@ -165,14 +167,15 @@ model StudentInvite {
 }
 
 model Season {
-  id              String      @id @default(cuid())
-  year            Int         @unique
-  activeRuleSetId String
-  capNumber       Float
-  createdAt       DateTime    @default(now())
-  activeRuleSet   RuleSet     @relation("SeasonActiveRuleSet", fields: [activeRuleSetId], references: [id], onDelete: Restrict)
-  teamSeasons     TeamSeason[]
-  publications    Publication[]
+  id                String             @id @default(cuid())
+  year              Int                @unique
+  activeRuleSetId   String
+  capNumber         Float
+  createdAt         DateTime           @default(now())
+  activeRuleSet     RuleSet            @relation("SeasonActiveRuleSet", fields: [activeRuleSetId], references: [id], onDelete: Restrict)
+  teamSeasons       TeamSeason[]
+  publications      Publication[]
+  chronicleArticles ChronicleArticle[]
 
   @@index([activeRuleSetId])
   @@index([createdAt])
@@ -209,19 +212,20 @@ model TeamSeason {
 }
 
 model RuleSet {
-  id                  String     @id @default(cuid())
-  version             Int        @unique
-  isActive            Boolean    @default(false)
+  id                  String            @id @default(cuid())
+  version             Int               @unique
+  isActive            Boolean           @default(false)
   rulesJson           Json
   changeSummaryJson   Json?
   effectiveSeasonYear Int?
   sourceProposalId    String?
-  createdAt           DateTime   @default(now())
+  createdAt           DateTime          @default(now())
   createdByUserId     String
-  createdBy           User       @relation("RuleSetCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
-  seasons             Season[]   @relation("SeasonActiveRuleSet")
-  targetProposals     Proposal[] @relation("ProposalTargetRuleSet")
-  sourceProposal      Proposal?  @relation("RuleSetSourceProposal", fields: [sourceProposalId], references: [id], onDelete: SetNull)
+  createdBy           User              @relation("RuleSetCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  seasons             Season[]          @relation("SeasonActiveRuleSet")
+  targetProposals     Proposal[]        @relation("ProposalTargetRuleSet")
+  sourceProposal      Proposal?         @relation("RuleSetSourceProposal", fields: [sourceProposalId], references: [id], onDelete: SetNull)
+  sandboxScenarios    SandboxScenario[]
 
   @@index([createdByUserId])
   @@index([effectiveSeasonYear])
@@ -552,4 +556,45 @@ model ActivityEvent {
   @@index([entityType, entityId])
   @@index([createdAt])
   @@index([createdByUserId])
+}
+
+model ChronicleArticle {
+  id           String   @id @default(cuid())
+  headline     String
+  body         String
+  category     String
+  entityType   String?
+  entityId     String?
+  seasonId     String?
+  teamId       String?
+  metadataJson Json?
+  publishedAt  DateTime @default(now())
+  season       Season?  @relation(fields: [seasonId], references: [id], onDelete: SetNull)
+  team         Team?    @relation(fields: [teamId], references: [id], onDelete: SetNull)
+
+  @@index([category])
+  @@index([seasonId])
+  @@index([teamId])
+  @@index([publishedAt])
+  @@index([entityType, entityId])
+}
+
+model SandboxScenario {
+  id              String   @id @default(cuid())
+  name            String
+  description     String?
+  diffJson        Json
+  resultJson      Json?
+  ruleSetId       String
+  createdByUserId String
+  isPublic        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  createdBy       User     @relation("SandboxScenarioCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  ruleSet         RuleSet  @relation(fields: [ruleSetId], references: [id], onDelete: Restrict)
+
+  @@index([createdByUserId])
+  @@index([ruleSetId])
+  @@index([isPublic])
+  @@index([createdAt])
 }

@@ -3,13 +3,18 @@ import { notFound } from "next/navigation";
 
 import { Badge } from "@/components/badge";
 import { Breadcrumb } from "@/components/breadcrumb";
+import { FinancialBarChart } from "@/components/financial-bar-chart";
+import { FinancialLineChart } from "@/components/financial-line-chart";
 import { SectionHeading } from "@/components/section-heading";
 import { formatCompactCurrency } from "@/lib/utils";
-import { getTeamPageData } from "@/server/data";
+import { getTeamHistoryData, getTeamPageData } from "@/server/data";
 
 export default async function TeamDetailPage({ params }: { params: Promise<{ teamId: string }> }) {
   const { teamId } = await params;
-  const data = await getTeamPageData(teamId);
+  const [data, history] = await Promise.all([
+    getTeamPageData(teamId),
+    getTeamHistoryData(teamId)
+  ]);
 
   if (!data) {
     notFound();
@@ -96,6 +101,63 @@ export default async function TeamDetailPage({ params }: { params: Promise<{ tea
           </div>
         </article>
       </section>
+
+      {history.length > 1 && (
+        <section className="panel p-6 space-y-8">
+          <div>
+            <h3 className="font-display text-2xl text-ink">Financial history</h3>
+            <p className="mt-2 text-sm leading-6 text-ink/68">
+              Payroll and luxury tax trends across all recorded seasons. Use these charts as evidence in your strategy or investigative research.
+            </p>
+          </div>
+
+          <div>
+            <p className="mb-3 font-mono text-xs uppercase tracking-[0.22em] text-accent">Payroll over time</p>
+            <FinancialLineChart
+              series={[{
+                name: data.team.name,
+                color: "#6366f1",
+                points: history.map((ts) => ({ year: ts.season.year, value: ts.payroll }))
+              }]}
+              yLabel="Payroll ($M)"
+              height={180}
+            />
+          </div>
+
+          <div>
+            <p className="mb-3 font-mono text-xs uppercase tracking-[0.22em] text-accent">Luxury tax paid</p>
+            <FinancialBarChart
+              seasons={history.map((ts) => ts.season.year)}
+              series={[{
+                name: "Tax paid",
+                color: "#f59e0b",
+                values: history.map((ts) => ts.taxPaid)
+              }]}
+              height={160}
+            />
+          </div>
+
+          <div>
+            <p className="mb-3 font-mono text-xs uppercase tracking-[0.22em] text-accent">Revenue vs. valuation</p>
+            <FinancialLineChart
+              series={[
+                {
+                  name: "Revenue",
+                  color: "#10b981",
+                  points: history.map((ts) => ({ year: ts.season.year, value: ts.revenue }))
+                },
+                {
+                  name: "Valuation",
+                  color: "#8b5cf6",
+                  points: history.map((ts) => ({ year: ts.season.year, value: ts.valuation }))
+                }
+              ]}
+              yLabel="$M"
+              height={180}
+            />
+          </div>
+        </section>
+      )}
 
       <section className="grid gap-6 lg:grid-cols-[1fr_1fr]">
         <article className="panel p-6">

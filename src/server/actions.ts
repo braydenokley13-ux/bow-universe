@@ -1433,4 +1433,80 @@ export async function advanceSeasonAction() {
   revalidatePath("/issues");
   revalidatePath("/rules");
   revalidatePath("/proposals");
+  revalidatePath("/chronicle");
+}
+
+const saveSandboxScenarioSchema = z.object({
+  name: z.string().min(1).max(120),
+  description: z.string().max(500).optional(),
+  diffJson: z.string().min(2),
+  resultJson: z.string().min(2).optional(),
+  ruleSetId: z.string().min(1),
+  isPublic: z.boolean().default(false)
+});
+
+export async function saveSandboxScenarioAction(formData: FormData) {
+  const viewer = await requireUser();
+  const raw = {
+    name: String(formData.get("name") ?? ""),
+    description: String(formData.get("description") ?? "") || undefined,
+    diffJson: String(formData.get("diffJson") ?? ""),
+    resultJson: String(formData.get("resultJson") ?? "") || undefined,
+    ruleSetId: String(formData.get("ruleSetId") ?? ""),
+    isPublic: formData.get("isPublic") === "true"
+  };
+
+  const parsed = saveSandboxScenarioSchema.parse(raw);
+
+  await prisma.sandboxScenario.create({
+    data: {
+      name: parsed.name,
+      description: parsed.description ?? null,
+      diffJson: JSON.parse(parsed.diffJson) as Prisma.InputJsonValue,
+      resultJson: parsed.resultJson
+        ? (JSON.parse(parsed.resultJson) as Prisma.InputJsonValue)
+        : Prisma.JsonNull,
+      ruleSetId: parsed.ruleSetId,
+      createdByUserId: viewer.id,
+      isPublic: parsed.isPublic
+    }
+  });
+
+  revalidatePath("/sandbox");
+}
+
+export async function deleteSandboxScenarioAction(formData: FormData) {
+  const viewer = await requireUser();
+  const scenarioId = String(formData.get("scenarioId") ?? "");
+  if (!scenarioId) return;
+
+  const scenario = await prisma.sandboxScenario.findUnique({ where: { id: scenarioId } });
+  if (!scenario || scenario.createdByUserId !== viewer.id) {
+    throw new Error("Not authorized to delete this scenario.");
+  }
+
+  await prisma.sandboxScenario.delete({ where: { id: scenarioId } });
+  revalidatePath("/sandbox");
+}
+
+export async function updateSandboxScenarioAction(formData: FormData) {
+  const viewer = await requireUser();
+  const scenarioId = String(formData.get("scenarioId") ?? "");
+  if (!scenarioId) return;
+
+  const scenario = await prisma.sandboxScenario.findUnique({ where: { id: scenarioId } });
+  if (!scenario || scenario.createdByUserId !== viewer.id) {
+    throw new Error("Not authorized to update this scenario.");
+  }
+
+  const name = String(formData.get("name") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim() || null;
+  const isPublic = formData.get("isPublic") === "true";
+
+  await prisma.sandboxScenario.update({
+    where: { id: scenarioId },
+    data: { name: name || scenario.name, description, isPublic }
+  });
+
+  revalidatePath("/sandbox");
 }
