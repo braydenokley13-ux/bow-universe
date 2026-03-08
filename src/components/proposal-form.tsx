@@ -619,8 +619,9 @@ export function ProposalForm({ issues, ruleSets, action, initial, intentLabel }:
       {renderHiddenFields()}
 
       <WizardShell
-        progressTitle="Adaptive proposal coach"
-        progressDescription="This wizard breaks the memo into tiny decisions, shows what strong work looks like, and blocks submission until the proposal is clear, evidence-backed, and ready for review."
+        progressTitle="Proposal coach"
+        documentTitle={values.title || "Untitled proposal"}
+        progressDescription="Build your policy memo step by step — connect an issue, write the case, test your rule in the sandbox, and submit when it's ready."
         autosaveMessage={autosaveState.message}
         autosaveTone={autosaveState.tone}
         completedSteps={completedSteps}

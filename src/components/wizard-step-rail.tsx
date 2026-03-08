@@ -37,8 +37,8 @@ export function WizardStepRail<StepId extends string>({
   onSelect
 }: WizardStepRailProps<StepId>) {
   return (
-    <nav className="rounded-[28px] border border-line bg-panel/85 p-4 shadow-panel">
-      <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Your progress</p>
+    <nav className="rounded-2xl border border-line/60 bg-panel/95 p-4" style={{boxShadow: "0 1px 2px rgba(32,48,60,0.04), 0 6px 20px rgba(32,48,60,0.07)"}}>
+      <p className="text-[11px] font-semibold uppercase tracking-wider text-accent/80">Your progress</p>
       <div className="mt-4 space-y-2">
         {items.map((item, index) => (
           <button

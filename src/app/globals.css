@@ -9,13 +9,16 @@
 }
 
 html {
-  background:
-    radial-gradient(circle at top left, rgba(216, 227, 229, 0.7), transparent 30%),
-    linear-gradient(180deg, #f6f1e8 0%, #f0eadf 100%);
+  background-color: #f0ead8;
+  background-image:
+    radial-gradient(ellipse 90% 55% at 10% -5%, rgba(68, 96, 109, 0.14) 0%, transparent 55%),
+    radial-gradient(ellipse 70% 45% at 90% 105%, rgba(68, 96, 109, 0.08) 0%, transparent 55%);
+  background-attachment: fixed;
 }
 
 body {
   @apply min-h-screen bg-transparent text-ink antialiased;
+  font-family: var(--font-body);
 }
 
 a {
@@ -23,7 +26,29 @@ a {
 }
 
 ::selection {
-  background: rgba(68, 96, 109, 0.18);
+  background: rgba(68, 96, 109, 0.22);
+}
+
+/* Subtle scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #c8c0b0;
+  border-radius: 99px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #a8a098;
+}
+
+/* Focus ring */
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(68, 96, 109, 0.45);
 }
 
 .metric-grid {
@@ -31,11 +56,13 @@ a {
 }
 
 .panel {
-  @apply rounded-2xl border border-line bg-panel/90 shadow-panel backdrop-blur-sm;
+  @apply rounded-2xl border border-line/60 bg-panel/95;
+  box-shadow: 0 1px 2px rgba(32, 48, 60, 0.04), 0 6px 20px rgba(32, 48, 60, 0.07);
 }
 
 .table-shell {
-  @apply overflow-hidden rounded-2xl border border-line bg-panel/95 shadow-panel;
+  @apply overflow-hidden rounded-2xl border border-line/60 bg-panel/95;
+  box-shadow: 0 1px 2px rgba(32, 48, 60, 0.04), 0 6px 20px rgba(32, 48, 60, 0.07);
 }
 
 @media print {
