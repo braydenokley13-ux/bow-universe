@@ -128,6 +128,8 @@ model User {
   createdStudentInvites StudentInvite[]        @relation("StudentInviteCreatedBy")
   studentInvites        StudentInvite[]        @relation("StudentInviteUser")
   sandboxScenarios      SandboxScenario[]      @relation("SandboxScenarioCreatedBy")
+  createdCohorts        Cohort[]               @relation("CohortCreatedBy")
+  cohortMemberships     CohortMember[]         @relation("CohortMemberships")
 
   @@index([linkedTeamId])
   @@index([commissionerId])
@@ -597,4 +599,57 @@ model SandboxScenario {
   @@index([ruleSetId])
   @@index([isPublic])
   @@index([createdAt])
+}
+
+model GlossaryTerm {
+  id         String   @id @default(cuid())
+  slug       String   @unique
+  term       String
+  definition String
+  bowExample String?
+  category   String?
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([category])
+  @@index([slug])
+  @@index([sortOrder])
+}
+
+model Cohort {
+  id              String            @id @default(cuid())
+  name            String
+  description     String?
+  createdByUserId String
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  createdBy       User              @relation("CohortCreatedBy", fields: [createdByUserId], references: [id], onDelete: Restrict)
+  members         CohortMember[]
+  milestones      CohortMilestone[]
+
+  @@index([createdByUserId])
+}
+
+model CohortMember {
+  cohortId String
+  userId   String
+  joinedAt DateTime @default(now())
+  cohort   Cohort   @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  user     User     @relation("CohortMemberships", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([cohortId, userId])
+  @@index([userId])
+}
+
+model CohortMilestone {
+  id          String   @id @default(cuid())
+  cohortId    String
+  label       String
+  targetDate  DateTime
+  description String?
+  cohort      Cohort   @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+
+  @@index([cohortId])
+  @@index([targetDate])
 }

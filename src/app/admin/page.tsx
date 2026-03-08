@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Badge } from "@/components/badge";
 import { SectionHeading } from "@/components/section-heading";
 import { AdminDecisionDesk } from "@/components/admin-decision-desk";
+import { AdminGlossaryManager } from "@/components/admin-glossary-manager";
 import { AdminIssueWorkbench } from "@/components/admin-issue-workbench";
 import { AdminProposalWorkflowCard } from "@/components/admin-proposal-workflow-card";
 import { AdminQueueSummary } from "@/components/admin-queue-summary";
@@ -11,13 +12,15 @@ import { AdminStudentAccountManager } from "@/components/admin-student-account-m
 import {
   advanceSeasonAction,
   createStudentAccountAction,
+  deleteGlossaryTermAction,
   recordDecisionAction,
+  saveGlossaryTermAction,
   saveIssueAction,
   updateProposalStatusAction,
   updateUserRoleAction
 } from "@/server/actions";
 import { requireAdmin } from "@/server/auth";
-import { getAdminPageData } from "@/server/data";
+import { getAllGlossaryTerms, getAdminPageData } from "@/server/data";
 import { getProposalReviewReadiness } from "@/lib/review-readiness";
 import { shouldShowDecisionDesk } from "@/lib/workflow-guards";
 
@@ -28,7 +31,8 @@ export default async function AdminPage({
 }) {
   await requireAdmin();
   const resolvedSearchParams = (await searchParams) ?? {};
-  const { users, issues, proposals, currentSeason, rulesets, teams, activity, publications } = await getAdminPageData();
+  const [{ users, issues, proposals, currentSeason, rulesets, teams, activity, publications }, glossaryTerms] =
+    await Promise.all([getAdminPageData(), getAllGlossaryTerms()]);
   const activationBaseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
 
   const proposalReadiness = new Map(
@@ -255,6 +259,30 @@ export default async function AdminPage({
             </div>
           ))}
         </div>
+      </section>
+
+      <section className="panel p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Cohorts</p>
+            <h3 className="mt-1 font-display text-2xl text-ink">Teacher cohort management</h3>
+            <p className="mt-1 text-sm text-ink/60">Create cohorts, assign students, set milestone deadlines, and track submission progress.</p>
+          </div>
+          <Link
+            href="/admin/cohorts"
+            className="rounded-full border border-accent bg-accent px-4 py-2 text-sm font-medium text-white"
+          >
+            Manage cohorts →
+          </Link>
+        </div>
+      </section>
+
+      <section className="panel p-6">
+        <AdminGlossaryManager
+          terms={glossaryTerms}
+          saveAction={saveGlossaryTermAction}
+          deleteAction={deleteGlossaryTermAction}
+        />
       </section>
     </div>
   );
