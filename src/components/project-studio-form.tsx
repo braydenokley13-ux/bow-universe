@@ -180,6 +180,19 @@ function uniqueLaneTags(values: LaneTag[], lanePrimary: LaneTag) {
   return Array.from(new Set([...values, lanePrimary])) as LaneTag[];
 }
 
+function replaceStepUrl(pathname: string, searchParams: string, stepId: string) {
+  const params = new URLSearchParams(searchParams);
+
+  if (params.get("step") === stepId) {
+    return;
+  }
+
+  params.set("step", stepId);
+  const nextUrl = `${pathname}?${params.toString()}`;
+
+  window.history.replaceState(window.history.state, "", nextUrl);
+}
+
 export function ProjectStudioForm({
   action,
   viewerId,
@@ -289,14 +302,8 @@ export function ProjectStudioForm({
   }, [assessment.firstIncompleteStepId, currentStepId, currentStepQuery]);
 
   useEffect(() => {
-    const params = new URLSearchParams(searchParams.toString());
-    if (params.get("step") === currentStepId) {
-      return;
-    }
-
-    params.set("step", currentStepId);
-    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-  }, [currentStepId, pathname, router, searchParams]);
+    replaceStepUrl(pathname, searchParams.toString(), currentStepId);
+  }, [currentStepId, pathname, searchParams]);
 
   const performAutosave = useCallback(async () => {
     if (!hasAnyDraftContent(values) && !draftId) {
@@ -322,7 +329,7 @@ export function ProjectStudioForm({
       if (result.id && result.id !== draftId) {
         setDraftId(result.id);
         if (!initial?.id && result.editUrl) {
-          router.replace(result.editUrl);
+          router.replace(`${result.editUrl}?step=${currentStepId}`, { scroll: false });
         }
       }
 
@@ -336,7 +343,7 @@ export function ProjectStudioForm({
         message: error instanceof Error ? error.message : "Autosave failed."
       });
     }
-  }, [draftId, initial?.id, router, values]);
+  }, [currentStepId, draftId, initial?.id, router, values]);
 
   useEffect(() => {
     if (!autosaveReadyRef.current) {
