@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Activity } from "lucide-react";
 
 import { getViewer } from "@/server/auth";
 
@@ -7,17 +8,17 @@ import { MobileNav } from "./mobile-nav";
 import { SignOutButton } from "./sign-out-button";
 
 const navItems = [
-  { href: "/", label: "Dashboard" },
-  { href: "/start", label: "Start here" },
-  { href: "/news", label: "News" },
-  { href: "/challenges", label: "Challenges" },
-  { href: "/teams", label: "Teams" },
-  { href: "/rules", label: "Rules" },
-  { href: "/issues", label: "Issues" },
-  { href: "/projects", label: "Projects" },
-  { href: "/proposals", label: "Proposals" },
-  { href: "/research", label: "Research" },
-  { href: "/admin", label: "Admin" }
+  { href: "/", label: "Home", icon: "Home" as const },
+  { href: "/start", label: "Start", icon: "Compass" as const },
+  { href: "/news", label: "News", icon: "Newspaper" as const },
+  { href: "/challenges", label: "Challenges", icon: "Trophy" as const },
+  { href: "/teams", label: "Teams", icon: "Users" as const },
+  { href: "/rules", label: "Rules", icon: "BookOpen" as const },
+  { href: "/issues", label: "Issues", icon: "AlertCircle" as const },
+  { href: "/projects", label: "Projects", icon: "FolderKanban" as const },
+  { href: "/proposals", label: "Proposals", icon: "FileText" as const },
+  { href: "/research", label: "Research", icon: "FlaskConical" as const },
+  { href: "/admin", label: "Admin", icon: "Settings" as const }
 ];
 
 export async function AppShell({ children }: { children: React.ReactNode }) {
@@ -25,29 +26,38 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen">
-      <header className="print-hide border-b border-line/80 bg-panel/70 backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 lg:gap-6 lg:px-8 lg:py-6">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-            <div className="space-y-1.5">
-              <p className="font-mono text-xs uppercase tracking-[0.28em] text-accent">
-                BOW Universe
-              </p>
-              <div>
-                <h1 className="font-display text-2xl text-ink lg:text-4xl">BOW League Research Terminal</h1>
-                <p className="hidden max-w-3xl text-sm leading-6 text-ink/70 lg:block">
-                  A persistent fictional sports-economy league for grades 5 to 8. Calm,
-                  analytical, and built for policy questions, team strategy, and student
-                  research.
-                </p>
+      {/* Slim sticky header */}
+      <header className="print-hide sticky top-0 z-30 border-b border-line/50 bg-panel/88 backdrop-blur-md">
+        <div className="mx-auto max-w-7xl px-4 lg:px-8">
+          <div className="flex h-14 items-center gap-3">
+            {/* Brand */}
+            <Link href="/" className="group flex flex-shrink-0 items-center gap-2.5">
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-accent text-white shadow-sm transition group-hover:opacity-85">
+                <Activity className="h-4 w-4" />
               </div>
+              <span className="hidden font-display text-[15px] font-semibold tracking-tight text-ink sm:block">
+                BOW Universe
+              </span>
+            </Link>
+
+            {/* Vertical divider */}
+            <div className="hidden h-5 w-px bg-line/80 lg:block" />
+
+            {/* Nav — inline on desktop */}
+            <div className="hidden flex-1 overflow-x-auto lg:block">
+              <MainNav items={navItems} />
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 text-sm">
+            {/* Push user to right on mobile */}
+            <div className="flex-1 lg:hidden" />
+
+            {/* User + sign-out */}
+            <div className="flex flex-shrink-0 items-center gap-2">
               {viewer ? (
                 <>
-                  <div className="rounded-full border border-line bg-mist px-4 py-2">
-                    <span className="font-medium">{viewer.name}</span>
-                    <span className="ml-2 font-mono text-xs uppercase tracking-wider text-ink/60">
+                  <div className="hidden items-center gap-2 rounded-full border border-line/60 bg-white/40 px-3 py-1.5 sm:flex">
+                    <span className="text-sm font-medium text-ink leading-none">{viewer.name}</span>
+                    <span className="font-mono text-[9px] uppercase tracking-widest text-ink/40 leading-none">
                       {viewer.role}
                     </span>
                   </div>
@@ -55,13 +65,13 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
                     <>
                       <Link
                         href="/"
-                        className="rounded-full border border-accent px-4 py-2 text-sm font-medium text-accent transition hover:bg-accent hover:text-white"
+                        className="hidden rounded-full border border-accent px-3 py-1.5 text-sm font-medium text-accent transition hover:bg-accent hover:text-white sm:block"
                       >
                         Mission control
                       </Link>
                       <Link
                         href="/students/me"
-                        className="rounded-full border border-line bg-white/70 px-4 py-2 text-sm font-medium text-ink transition hover:border-accent"
+                        className="hidden rounded-full border border-line bg-white/70 px-3 py-1.5 text-sm font-medium text-ink transition hover:border-accent md:block"
                       >
                         Portfolio
                       </Link>
@@ -72,17 +82,13 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
               ) : (
                 <Link
                   href="/login"
-                  className="rounded-full border border-accent bg-accent px-4 py-2 font-medium text-white"
+                  className="rounded-full border border-accent bg-accent px-4 py-1.5 text-sm font-medium text-white transition hover:bg-accent/90"
                 >
                   Sign in
                 </Link>
               )}
               <MobileNav items={navItems} />
             </div>
-          </div>
-
-          <div className="hidden lg:block">
-            <MainNav items={navItems} />
           </div>
         </div>
       </header>

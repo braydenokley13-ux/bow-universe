@@ -25,7 +25,9 @@ const config: Config = {
         mono: ["var(--font-mono)"]
       },
       boxShadow: {
-        panel: "0 10px 30px rgba(32, 48, 60, 0.08)"
+        panel: "0 1px 2px rgba(32, 48, 60, 0.04), 0 6px 20px rgba(32, 48, 60, 0.07)",
+        card: "0 2px 8px rgba(32, 48, 60, 0.08), 0 16px 40px rgba(32, 48, 60, 0.07)",
+        sm: "0 1px 3px rgba(32, 48, 60, 0.08)"
       }
     }
   },

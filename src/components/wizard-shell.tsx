@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 type WizardShellProps = {
   progressTitle: string;
   progressDescription: string;
+  documentTitle?: string;
   autosaveMessage: string;
   autosaveTone: "idle" | "saving" | "saved" | "error";
   completedSteps: number;
@@ -26,27 +27,27 @@ type WizardShellProps = {
 function autosaveDisplay(tone: WizardShellProps["autosaveTone"], message: string) {
   if (tone === "error") {
     return {
-      className: "rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger",
+      className: "rounded-xl border border-danger/30 bg-danger/10 px-4 py-2.5 text-sm text-danger",
       text: "Your work wasn't saved. Check your connection and try again."
     };
   }
 
   if (tone === "saved") {
     return {
-      className: "rounded-xl border border-success/30 bg-success/10 px-4 py-3 text-sm text-success",
+      className: "rounded-xl border border-success/30 bg-success/10 px-4 py-2.5 text-sm text-success",
       text: `✓ ${message}`
     };
   }
 
   if (tone === "saving") {
     return {
-      className: "rounded-xl border border-line bg-white/70 px-4 py-3 text-sm text-ink/68 animate-pulse",
+      className: "rounded-xl border border-line bg-white/70 px-4 py-2.5 text-sm text-ink/68 animate-pulse",
       text: "Saving…"
     };
   }
 
   return {
-    className: "rounded-xl border border-line bg-white/70 px-4 py-3 text-sm text-ink/55",
+    className: "rounded-xl border border-line bg-white/60 px-4 py-2.5 text-sm text-ink/45",
     text: message
   };
 }
@@ -54,6 +55,7 @@ function autosaveDisplay(tone: WizardShellProps["autosaveTone"], message: string
 export function WizardShell({
   progressTitle,
   progressDescription,
+  documentTitle,
   autosaveMessage,
   autosaveTone,
   completedSteps,
@@ -68,40 +70,49 @@ export function WizardShell({
   const autosave = autosaveDisplay(autosaveTone, autosaveMessage);
 
   return (
-    <div className="space-y-6">
-      <section className="panel p-6">
-        <div>
-          <p className="font-mono text-xs uppercase tracking-[0.24em] text-accent">Adaptive coach</p>
-          <h3 className="mt-3 font-display text-3xl text-ink">{progressTitle}</h3>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-ink/68">{progressDescription}</p>
+    <div className="space-y-5">
+      {/* Header card */}
+      <section className="panel p-5">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-accent/80">{progressTitle}</p>
+            {documentTitle ? (
+              <h2 className="mt-1.5 font-display text-2xl text-ink leading-snug">{documentTitle}</h2>
+            ) : (
+              <p className="mt-1.5 text-sm leading-6 text-ink/55">{progressDescription}</p>
+            )}
+            {documentTitle && (
+              <p className="mt-1 text-[13px] leading-5 text-ink/50">{progressDescription}</p>
+            )}
+          </div>
+
+          {/* Autosave badge — right side */}
+          <div className="flex-shrink-0">
+            <div className={autosave.className}>{autosave.text}</div>
+          </div>
         </div>
 
-        {/* Progress bar */}
-        <div className="mt-5 space-y-2">
+        {/* Progress */}
+        <div className="mt-4 space-y-2">
           <div className="flex items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm font-medium text-ink">
-                {completedSteps} of {totalSteps} sections ready
+              <span className="text-[13px] font-medium text-ink">
+                {completedSteps} / {totalSteps} sections
               </span>
               {currentStepName && (
-                <span className="rounded-full border border-accent/30 bg-accent/10 px-3 py-0.5 font-mono text-[11px] uppercase tracking-[0.18em] text-accent">
-                  Now: {currentStepName}
+                <span className="rounded-full border border-accent/25 bg-accent/10 px-2.5 py-0.5 text-[11px] font-medium text-accent">
+                  {currentStepName}
                 </span>
               )}
             </div>
-            <span className="font-mono text-xs text-ink/45">{progressPct}%</span>
+            <span className="text-[11px] font-semibold tabular-nums text-ink/40">{progressPct}%</span>
           </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-line/40">
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-line/50">
             <div
               className="h-full rounded-full bg-accent transition-all duration-500"
               style={{ width: `${progressPct}%` }}
             />
           </div>
-        </div>
-
-        {/* Autosave status */}
-        <div className="mt-4">
-          <div className={autosave.className}>{autosave.text}</div>
         </div>
 
         {coachPanel ? (
@@ -168,9 +179,9 @@ export function WizardShell({
         ) : null}
       </section>
 
-      <div className="grid gap-6 xl:grid-cols-[280px_minmax(0,1fr)]">
-        <div className="xl:sticky xl:top-6 xl:self-start">{rail}</div>
-        <div className="space-y-6">
+      <div className="grid gap-5 xl:grid-cols-[260px_minmax(0,1fr)]">
+        <div className="xl:sticky xl:top-20 xl:self-start">{rail}</div>
+        <div className="space-y-5">
           {children}
           {footer}
         </div>

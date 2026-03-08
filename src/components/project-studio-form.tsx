@@ -1550,6 +1550,7 @@ export function ProjectStudioForm({
       {beginnerMode ? (
         <WizardShell
           progressTitle="First project guide"
+          documentTitle={effectiveValues.title || "Untitled project"}
           progressDescription={`This version keeps the work small and clear. You answer one question at a time, and the studio builds the formal project fields for you in ${laneTagLabels[effectiveValues.lanePrimary]}.`}
           autosaveMessage={autosaveState.message}
           autosaveTone={autosaveState.tone}
@@ -1588,8 +1589,9 @@ export function ProjectStudioForm({
         </WizardShell>
       ) : (
         <WizardShell
-          progressTitle="Adaptive project coach"
-          progressDescription={`This coach now works across all four lanes. It changes the guidance, section prompts, and final review standards to match the kind of publication you are building in ${laneTagLabels[values.lanePrimary]}.`}
+          progressTitle="Project coach"
+          documentTitle={values.title || "Untitled project"}
+          progressDescription={`Lane: ${laneTagLabels[values.lanePrimary]}. Complete each section, then submit for review.`}
           autosaveMessage={autosaveState.message}
           autosaveTone={autosaveState.tone}
           completedSteps={completedSteps}
