@@ -34,6 +34,7 @@ import { parseRuleDiff } from "@/lib/rules";
 import type { ReferenceEntry } from "@/lib/types";
 import { parseJsonText, parseStringList } from "@/lib/utils";
 import { requireAdmin, requireUser } from "@/server/auth";
+import { syncChallengeMilestonesForSource } from "@/server/challenges";
 import {
   snapshotProjectRevision,
   snapshotProposalRevision,
@@ -625,6 +626,13 @@ export async function createProjectAction(formData: FormData) {
     projectId
   });
 
+  await syncChallengeMilestonesForSource({
+    sourceType: "PROJECT",
+    sourceId: project.id,
+    status: project.submissionStatus,
+    actorUserId: viewer.id
+  });
+
   await createActivityEvent(prisma, {
     type: "project",
     title: `${submissionStatus === SubmissionStatus.SUBMITTED ? "Submitted" : "Saved"} project: ${project.title}`,
@@ -650,6 +658,13 @@ export async function createProposalAction(formData: FormData) {
     formData,
     actor: viewer,
     proposalId
+  });
+
+  await syncChallengeMilestonesForSource({
+    sourceType: "PROPOSAL",
+    sourceId: proposal.id,
+    status: proposal.status,
+    actorUserId: viewer.id
   });
 
   await createActivityEvent(prisma, {
@@ -683,6 +698,13 @@ export async function updateProjectAction(formData: FormData) {
     projectId
   });
 
+  await syncChallengeMilestonesForSource({
+    sourceType: "PROJECT",
+    sourceId: project.id,
+    status: project.submissionStatus,
+    actorUserId: viewer.id
+  });
+
   await createActivityEvent(prisma, {
     type: "project",
     title: `Updated project: ${project.title}`,
@@ -713,6 +735,13 @@ export async function updateProposalAction(formData: FormData) {
     formData,
     actor: viewer,
     proposalId
+  });
+
+  await syncChallengeMilestonesForSource({
+    sourceType: "PROPOSAL",
+    sourceId: proposal.id,
+    status: proposal.status,
+    actorUserId: viewer.id
   });
 
   await createActivityEvent(prisma, {
@@ -846,6 +875,13 @@ export async function reviewProjectAction(formData: FormData) {
     actorUserId: viewer.id
   });
 
+  await syncChallengeMilestonesForSource({
+    sourceType: "PROJECT",
+    sourceId: projectId,
+    status: submissionStatus,
+    actorUserId: viewer.id
+  });
+
   await createActivityEvent(prisma, {
     type: "project",
     title: `Project review state: ${submissionStatus.replaceAll("_", " ")}`,
@@ -898,6 +934,13 @@ export async function reviewProposalAction(formData: FormData) {
 
   await syncProposalPublication({
     proposalId,
+    actorUserId: viewer.id
+  });
+
+  await syncChallengeMilestonesForSource({
+    sourceType: "PROPOSAL",
+    sourceId: proposalId,
+    status,
     actorUserId: viewer.id
   });
 
@@ -1252,6 +1295,15 @@ export async function updateProposalStatusAction(formData: FormData) {
     return;
   }
 
+  if (
+    status === ProposalStatus.VOTING &&
+    voteStart &&
+    voteEnd &&
+    voteEnd.getTime() <= voteStart.getTime()
+  ) {
+    return;
+  }
+
   const existing = await prisma.proposal.findUnique({
     where: { id: proposalId }
   });
@@ -1282,6 +1334,13 @@ export async function updateProposalStatusAction(formData: FormData) {
 
   await syncProposalPublication({
     proposalId,
+    actorUserId: viewer.id
+  });
+
+  await syncChallengeMilestonesForSource({
+    sourceType: "PROPOSAL",
+    sourceId: proposalId,
+    status,
     actorUserId: viewer.id
   });
 

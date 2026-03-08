@@ -3,12 +3,12 @@ import { PublicationSourceType } from "@prisma/client";
 
 import { Badge } from "@/components/badge";
 import { SectionHeading } from "@/components/section-heading";
-import { getLaneLabel, getLaneTemplate } from "@/lib/publications";
+import { getLaneLabel, getLaneTemplate, getPublicationDisplayLabel } from "@/lib/publications";
 import { getLanePrompt } from "@/lib/discovery-guidance";
 import { parseProjectJson } from "@/server/data";
 import { getViewer } from "@/server/auth";
 import { getProjectsPageData } from "@/server/data";
-import { publicationTypeLabels, submissionStatusLabels, type LaneTag } from "@/lib/types";
+import { submissionStatusLabels, type LaneTag } from "@/lib/types";
 
 const laneCards: LaneTag[] = [
   "TOOL_BUILDERS",
@@ -152,7 +152,12 @@ export default async function ProjectsPage() {
                         <p className="mt-2 text-sm leading-6 text-ink/68">{project.abstract ?? project.summary}</p>
                       </div>
                       <div className="flex flex-wrap gap-2">
-                        <Badge>{publicationTypeLabels[project.publicationType]}</Badge>
+                        <Badge>
+                          {getPublicationDisplayLabel({
+                            publicationType: project.publicationType,
+                            lanePrimary: parsed.lanePrimary
+                          })}
+                        </Badge>
                         <Badge tone="warn">{submissionStatusLabels[project.submissionStatus]}</Badge>
                       </div>
                     </div>
@@ -194,7 +199,13 @@ export default async function ProjectsPage() {
                   <p className="font-medium text-ink">{publication.title}</p>
                   <p className="mt-2 text-sm leading-6 text-ink/68">{publication.abstract}</p>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <Badge>{publicationTypeLabels[publication.publicationType]}</Badge>
+                    <Badge>
+                      {getPublicationDisplayLabel({
+                        publicationType: publication.publicationType,
+                        sourceType: publication.sourceType,
+                        lanePrimary: publication.lanePrimary
+                      })}
+                    </Badge>
                     {publication.externalReady ? <Badge tone="success">External ready</Badge> : null}
                   </div>
                 </Link>

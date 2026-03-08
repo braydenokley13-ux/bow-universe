@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import type { RecommendedMission } from "@/lib/student-flow";
 import type { LaneTag } from "@/lib/types";
 import { laneTagLabels, submissionStatusLabels } from "@/lib/types";
 import type { Viewer } from "@/server/auth";
@@ -10,6 +11,7 @@ type ActiveProject = {
   submissionStatus: string;
   lanePrimary: LaneTag | null;
   updatedAt: Date;
+  primaryIssue: { id: string; title: string } | null;
 };
 
 type ActiveProposal = {
@@ -17,6 +19,55 @@ type ActiveProposal = {
   title: string;
   status: string;
   updatedAt: Date;
+  issue: { id: string; title: string };
+};
+
+type FeedbackItem = {
+  id: string;
+  kind: "project" | "proposal";
+  title: string;
+  sectionKey: string;
+  body: string;
+  createdAt: Date;
+  createdBy: string;
+  href: string;
+};
+
+type ChallengeEntryCard = {
+  id: string;
+  sourceType: "PROJECT" | "PROPOSAL";
+  sourceId: string;
+  totalScore: number;
+  challenge: {
+    id: string;
+    title: string;
+    summary: string;
+    issue: { title: string } | null;
+    team: { name: string } | null;
+  };
+};
+
+type SpotlightPost = {
+  id: string;
+  headline: string;
+  dek: string;
+  slug: string;
+  author: { name: string };
+  publishedAt: Date;
+};
+
+type VotingProposal = {
+  id: string;
+  title: string;
+  voteEnd: Date | null;
+  issue: { title: string };
+};
+
+type RecommendedAction = {
+  title: string;
+  body: string;
+  href: string;
+  ctaLabel: string;
 };
 
 type LeagueMetrics = {
@@ -39,8 +90,15 @@ type LeagueMetrics = {
 type StudentDashboardProps = {
   viewer: Viewer;
   linkedTeam: { id: string; name: string } | null;
+  recommendedAction: RecommendedAction;
+  recommendedMission: RecommendedMission | null;
   openProjects: ActiveProject[];
   openProposals: ActiveProposal[];
+  feedbackItems: FeedbackItem[];
+  votingProposals: VotingProposal[];
+  challengeEntries: ChallengeEntryCard[];
+  spotlightPosts: SpotlightPost[];
+  submittedFirstProject: boolean;
   league: LeagueMetrics;
 };
 
@@ -52,7 +110,7 @@ function statusTone(status: string) {
 }
 
 function statusLabel(status: string): string {
-  return submissionStatusLabels[status as keyof typeof submissionStatusLabels] ?? status;
+  return submissionStatusLabels[status as keyof typeof submissionStatusLabels] ?? status.replaceAll("_", " ");
 }
 
 function eventHref(entityType: string | null, entityId: string | null) {
@@ -60,174 +118,422 @@ function eventHref(entityType: string | null, entityId: string | null) {
   if (entityType === "Proposal" || entityType === "CommissionerDecision") return `/proposals/${entityId}`;
   if (entityType === "Project") return `/projects/${entityId}`;
   if (entityType === "Issue") return `/issues/${entityId}`;
+  if (entityType === "Challenge") return `/challenges/${entityId}`;
   return "#";
 }
 
-export function StudentDashboard({ viewer, linkedTeam, openProjects, openProposals, league }: StudentDashboardProps) {
+export function StudentDashboard({
+  viewer,
+  linkedTeam,
+  recommendedAction,
+  recommendedMission,
+  openProjects,
+  openProposals,
+  feedbackItems,
+  votingProposals,
+  challengeEntries,
+  spotlightPosts,
+  submittedFirstProject,
+  league
+}: StudentDashboardProps) {
   const totalOpen = openProjects.length + openProposals.length;
   const { currentSeason, metrics, activity } = league;
+  const workbenchItems = submittedFirstProject ? [...openProjects, ...openProposals] : openProjects;
 
   return (
     <div className="space-y-10">
-      {/* Hero: personal welcome */}
-      <section className="panel p-8">
-        <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-accent">Welcome back</p>
-        <h2 className="mt-3 font-display text-3xl text-ink">{viewer.name}</h2>
-        {totalOpen > 0 ? (
-          <p className="mt-2 text-base leading-7 text-ink/70">
-            You have{" "}
-            <span className="font-medium text-ink">
-              {totalOpen} open {totalOpen === 1 ? "piece" : "pieces"} of work
-            </span>{" "}
-            in progress. Pick up where you left off below.
+      <section className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
+        <article className="panel p-8">
+          <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-accent">Student mission control</p>
+          <h2 className="mt-3 font-display text-4xl text-ink">{viewer.name}</h2>
+          <p className="mt-3 max-w-3xl text-base leading-7 text-ink/70">
+            This is your working desk: what needs attention, what is ready to move, and where your best next contribution will help the league most.
           </p>
-        ) : (
-          <p className="mt-2 text-base leading-7 text-ink/70">
-            You don&apos;t have any work in progress yet. Start a project or draft a proposal below.
-          </p>
-        )}
+
+          <div className="mt-6 grid gap-4 sm:grid-cols-3">
+            <div className="rounded-2xl border border-line bg-white/65 p-4">
+              <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Open work</p>
+              <p className="mt-3 font-display text-3xl text-ink">{totalOpen}</p>
+            </div>
+            <div className="rounded-2xl border border-line bg-white/65 p-4">
+              <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Feedback queue</p>
+              <p className="mt-3 font-display text-3xl text-ink">{feedbackItems.length}</p>
+            </div>
+            <div className="rounded-2xl border border-line bg-white/65 p-4">
+              <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">
+                {submittedFirstProject ? "Active challenges" : "Next mission"}
+              </p>
+              <p className="mt-3 font-display text-3xl text-ink">
+                {submittedFirstProject ? challengeEntries.length : recommendedMission ? "Ready" : "Soon"}
+              </p>
+            </div>
+          </div>
+        </article>
+
+        <article className="rounded-[28px] border border-accent/20 bg-accent/5 p-6 shadow-panel">
+          <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Best next move</p>
+          <h3 className="mt-3 font-display text-3xl text-ink">{recommendedAction.title}</h3>
+          <p className="mt-4 text-sm leading-6 text-ink/72">{recommendedAction.body}</p>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Link
+              href={recommendedAction.href}
+              className="rounded-full border border-accent bg-accent px-4 py-2 text-sm font-medium text-white"
+            >
+              {recommendedAction.ctaLabel}
+            </Link>
+            <Link
+              href="/students/me"
+              className="rounded-full border border-line bg-white/80 px-4 py-2 text-sm font-medium text-ink"
+            >
+              Open portfolio
+            </Link>
+          </div>
+        </article>
       </section>
 
-      {linkedTeam ? (
+      {recommendedMission ? (
         <section className="panel p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Linked team</p>
-              <h3 className="mt-3 font-display text-2xl text-ink">{linkedTeam.name}</h3>
-              <p className="mt-2 text-sm leading-6 text-ink/70">
-                Your commissioner linked your account to this team, so this is a strong place to start when you open team snapshots, issues, and strategy work.
+              <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">
+                Recommended mission
+              </p>
+              <h3 className="mt-3 font-display text-2xl text-ink">
+                {recommendedMission.issue.title}
+              </h3>
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-ink/70">
+                {recommendedMission.reason}
               </p>
             </div>
             <Link
-              href={`/teams/${linkedTeam.id}`}
+              href={recommendedMission.starterHref}
               className="rounded-full border border-accent bg-accent px-4 py-2 text-sm font-medium text-white"
             >
-              Open linked team
+              Start this project
             </Link>
+          </div>
+
+          <div className="mt-5 grid gap-4 md:grid-cols-3">
+            <div className="rounded-2xl border border-line bg-white/60 p-4">
+              <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">
+                Suggested lane
+              </p>
+              <p className="mt-3 text-sm font-medium text-ink">
+                {laneTagLabels[recommendedMission.suggestedLane]}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-line bg-white/60 p-4">
+              <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Severity</p>
+              <p className="mt-3 text-sm font-medium text-ink">
+                {recommendedMission.issue.severity}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-line bg-white/60 p-4">
+              <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Team anchor</p>
+              <p className="mt-3 text-sm font-medium text-ink">
+                {recommendedMission.issue.team?.name ?? "League-wide"}
+              </p>
+            </div>
           </div>
         </section>
       ) : null}
 
-      {/* Active work */}
-      {totalOpen > 0 && (
-        <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="font-display text-2xl text-ink">Your active work</h3>
+      <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+        <article className="panel p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Workbench</p>
+              <h3 className="mt-3 font-display text-2xl text-ink">
+                {submittedFirstProject ? "Resume exactly where you left off" : "Keep moving one step at a time"}
+              </h3>
+            </div>
             <div className="flex gap-3">
               <Link
-                href="/projects/new"
+                href={recommendedMission?.starterHref ?? "/projects/new?beginner=1"}
                 className="rounded-full border border-accent bg-accent px-4 py-2 text-sm font-medium text-white"
               >
-                New project
+                {submittedFirstProject ? "New project" : "Start guided project"}
               </Link>
+              {submittedFirstProject ? (
+                <Link
+                  href="/proposals/new"
+                  className="rounded-full border border-line bg-white/70 px-4 py-2 text-sm font-medium text-ink"
+                >
+                  New proposal
+                </Link>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="mt-6 grid gap-4">
+            {workbenchItems
+              .sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime())
+              .slice(0, 6)
+              .map((item) =>
+                "submissionStatus" in item ? (
+                  <Link
+                    key={`project-${item.id}`}
+                    href={`/projects/${item.id}/edit`}
+                    className="rounded-2xl border border-line bg-white/60 p-4 hover:border-accent"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-ink/50">Project</span>
+                      {item.lanePrimary ? (
+                        <span className="rounded-full border border-accent/25 bg-accent/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.18em] text-accent">
+                          {laneTagLabels[item.lanePrimary]}
+                        </span>
+                      ) : null}
+                      <span className={`ml-auto rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.18em] ${statusTone(item.submissionStatus)}`}>
+                        {statusLabel(item.submissionStatus)}
+                      </span>
+                    </div>
+                    <p className="mt-3 font-medium text-ink">{item.title}</p>
+                    <p className="mt-2 text-sm text-ink/62">
+                      {item.primaryIssue ? `Issue: ${item.primaryIssue.title}` : "League-wide project"}
+                    </p>
+                  </Link>
+                ) : (
+                  <Link
+                    key={`proposal-${item.id}`}
+                    href={`/proposals/${item.id}/edit`}
+                    className="rounded-2xl border border-line bg-white/60 p-4 hover:border-accent"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-ink/50">Proposal</span>
+                      <span className={`ml-auto rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.18em] ${statusTone(item.status)}`}>
+                        {statusLabel(item.status)}
+                      </span>
+                    </div>
+                    <p className="mt-3 font-medium text-ink">{item.title}</p>
+                    <p className="mt-2 text-sm text-ink/62">Issue: {item.issue.title}</p>
+                  </Link>
+                )
+              )}
+            {workbenchItems.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-line px-4 py-6 text-sm text-ink/60">
+                {submittedFirstProject
+                  ? "You do not have an open draft right now. Start the next piece of work when you are ready."
+                  : "No draft has started yet. Use the guided project button to open your first draft."}
+              </div>
+            ) : null}
+          </div>
+        </article>
+
+        <article className="panel p-6">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Response queue</p>
+              <h3 className="mt-3 font-display text-2xl text-ink">Feedback waiting on you</h3>
+            </div>
+            <span className="rounded-full border border-line bg-white/70 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.18em] text-ink/60">
+              {feedbackItems.length}
+            </span>
+          </div>
+
+          <div className="mt-6 space-y-4">
+            {feedbackItems.length > 0 ? (
+              feedbackItems.map((item) => (
+                <Link
+                  key={item.id}
+                  href={item.href}
+                  className="block rounded-2xl border border-line bg-white/60 p-4 hover:border-accent"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="font-medium text-ink">{item.title}</p>
+                    <span className="rounded-full border border-warn/30 bg-warn/10 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.18em] text-warn">
+                      {item.kind}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm text-ink/62">
+                    {item.createdBy} on {item.sectionKey}
+                  </p>
+                  <p className="mt-3 text-sm leading-6 text-ink/68">{item.body}</p>
+                </Link>
+              ))
+            ) : (
+              <div className="rounded-2xl border border-dashed border-line px-4 py-6 text-sm text-ink/60">
+                No feedback is waiting on you right now.
+              </div>
+            )}
+          </div>
+        </article>
+      </section>
+
+      {!submittedFirstProject ? (
+        <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+          <article className="panel p-6">
+            <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">
+              Later in the loop
+            </p>
+            <h3 className="mt-3 font-display text-2xl text-ink">
+              Proposals come after your first project
+            </h3>
+            <p className="mt-3 text-sm leading-6 text-ink/70">
+              Finish one guided project first. After that, proposal writing and voting feel much
+              easier because you already know the league and the workflow.
+            </p>
+            <Link
+              href="/proposals"
+              className="mt-5 inline-flex rounded-full border border-line bg-white/80 px-4 py-2 text-sm font-medium text-ink"
+            >
+              See proposal examples
+            </Link>
+          </article>
+
+          <article className="panel p-6">
+            <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">
+              Optional later
+            </p>
+            <h3 className="mt-3 font-display text-2xl text-ink">
+              Challenges stay secondary for now
+            </h3>
+            <p className="mt-3 text-sm leading-6 text-ink/70">
+              The first win matters more than competition. Challenges are still there, but they
+              should not pull you away from starting and finishing your first real project.
+            </p>
+            <Link
+              href="/challenges"
+              className="mt-5 inline-flex rounded-full border border-line bg-white/80 px-4 py-2 text-sm font-medium text-ink"
+            >
+              Browse challenges
+            </Link>
+          </article>
+        </section>
+      ) : null}
+
+      {submittedFirstProject ? (
+        <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+          <article className="panel p-6">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Challenge board</p>
+                <h3 className="mt-3 font-display text-2xl text-ink">Competitive research you joined</h3>
+              </div>
+              <Link href="/challenges" className="rounded-full border border-line bg-white/70 px-4 py-2 text-sm font-medium text-ink">
+                Browse challenges
+              </Link>
+            </div>
+
+            <div className="mt-6 space-y-4">
+              {challengeEntries.length > 0 ? (
+                challengeEntries.map((entry) => (
+                  <Link
+                    key={entry.id}
+                    href={`/challenges/${entry.challenge.id}`}
+                    className="block rounded-2xl border border-line bg-white/60 p-4 hover:border-accent"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <p className="font-medium text-ink">{entry.challenge.title}</p>
+                      <span className="rounded-full border border-accent/30 bg-accent/10 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.18em] text-accent">
+                        {entry.totalScore} pts
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm leading-6 text-ink/68">{entry.challenge.summary}</p>
+                    <p className="mt-3 text-xs uppercase tracking-[0.18em] text-ink/55">
+                      Entered via {entry.sourceType.toLowerCase()}
+                      {entry.challenge.issue ? ` · ${entry.challenge.issue.title}` : ""}
+                      {entry.challenge.team ? ` · ${entry.challenge.team.name}` : ""}
+                    </p>
+                  </Link>
+                ))
+              ) : (
+                <div className="rounded-2xl border border-dashed border-line px-4 py-6 text-sm text-ink/60">
+                  Join a challenge to turn your research into a live competition.
+                </div>
+              )}
+            </div>
+          </article>
+
+          <article className="panel p-6">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Participation window</p>
+                <h3 className="mt-3 font-display text-2xl text-ink">Votes and decisions coming up</h3>
+              </div>
+              <Link href="/proposals" className="rounded-full border border-line bg-white/70 px-4 py-2 text-sm font-medium text-ink">
+                Open proposals
+              </Link>
+            </div>
+
+            <div className="mt-6 space-y-4">
+              {votingProposals.length > 0 ? (
+                votingProposals.map((proposal) => (
+                  <Link
+                    key={proposal.id}
+                    href={`/proposals/${proposal.id}`}
+                    className="block rounded-2xl border border-line bg-white/60 p-4 hover:border-accent"
+                  >
+                    <p className="font-medium text-ink">{proposal.title}</p>
+                    <p className="mt-2 text-sm leading-6 text-ink/68">Issue: {proposal.issue.title}</p>
+                    <p className="mt-3 text-xs uppercase tracking-[0.18em] text-ink/55">
+                      Vote ends {proposal.voteEnd ? new Date(proposal.voteEnd).toLocaleString("en-US") : "soon"}
+                    </p>
+                  </Link>
+                ))
+              ) : (
+                <div className="rounded-2xl border border-dashed border-line px-4 py-6 text-sm text-ink/60">
+                  There are no unvoted proposal windows waiting on you right now.
+                </div>
+              )}
+            </div>
+          </article>
+        </section>
+      ) : null}
+
+      <section className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+        <article className="panel p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Spotlight</p>
+              <h3 className="mt-3 font-display text-2xl text-ink">Commissioner mentions tied to your work</h3>
+            </div>
+            {linkedTeam ? (
               <Link
-                href="/proposals/new"
+                href={`/teams/${linkedTeam.id}`}
                 className="rounded-full border border-line bg-white/70 px-4 py-2 text-sm font-medium text-ink"
               >
-                New proposal
+                Linked team: {linkedTeam.name}
               </Link>
-            </div>
+            ) : null}
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
-            {openProjects.map((project) => (
-              <Link
-                key={project.id}
-                href={`/projects/${project.id}/edit`}
-                className="panel group flex flex-col gap-3 p-5 hover:border-accent"
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-ink/50">Project</span>
-                  {project.lanePrimary && (
-                    <span className="rounded-full border border-accent/25 bg-accent/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.18em] text-accent">
-                      {laneTagLabels[project.lanePrimary].split("·")[1]?.trim() ?? project.lanePrimary}
+          <div className="mt-6 space-y-4">
+            {spotlightPosts.length > 0 ? (
+              spotlightPosts.map((post) => (
+                <Link
+                  key={post.id}
+                  href={`/news#${post.slug}`}
+                  className="block rounded-2xl border border-line bg-white/60 p-4 hover:border-accent"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="font-medium text-ink">{post.headline}</p>
+                    <span className="rounded-full border border-success/30 bg-success/10 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.18em] text-success">
+                      Spotlight
                     </span>
-                  )}
-                  <span
-                    className={`ml-auto rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.18em] ${statusTone(project.submissionStatus)}`}
-                  >
-                    {statusLabel(project.submissionStatus)}
-                  </span>
-                </div>
-                <p className="font-medium text-ink group-hover:text-accent">{project.title}</p>
-                <p className="font-mono text-xs text-ink/45">
-                  Updated{" "}
-                  {new Date(project.updatedAt).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric"
-                  })}
-                </p>
-                <p className="font-mono text-xs uppercase tracking-[0.18em] text-accent opacity-0 transition group-hover:opacity-100">
-                  Continue →
-                </p>
-              </Link>
-            ))}
-
-            {openProposals.map((proposal) => (
-              <Link
-                key={proposal.id}
-                href={`/proposals/${proposal.id}/edit`}
-                className="panel group flex flex-col gap-3 p-5 hover:border-accent"
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-ink/50">Proposal</span>
-                  <span
-                    className={`ml-auto rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.18em] ${statusTone(proposal.status)}`}
-                  >
-                    {statusLabel(proposal.status)}
-                  </span>
-                </div>
-                <p className="font-medium text-ink group-hover:text-accent">{proposal.title}</p>
-                <p className="font-mono text-xs text-ink/45">
-                  Updated{" "}
-                  {new Date(proposal.updatedAt).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric"
-                  })}
-                </p>
-                <p className="font-mono text-xs uppercase tracking-[0.18em] text-accent opacity-0 transition group-hover:opacity-100">
-                  Continue →
-                </p>
-              </Link>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Empty state CTA */}
-      {totalOpen === 0 && (
-        <section className="flex flex-wrap gap-4">
-          <Link
-            href="/projects/new"
-            className="rounded-full border border-accent bg-accent px-5 py-3 font-medium text-white"
-          >
-            Start a project
-          </Link>
-          <Link
-            href="/proposals/new"
-            className="rounded-full border border-line bg-white/70 px-5 py-3 font-medium text-ink"
-          >
-            Draft a proposal
-          </Link>
-        </section>
-      )}
-
-      {/* League pulse — demoted, collapsible */}
-      <section className="panel p-6">
-        <details>
-          <summary className="cursor-pointer list-none">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">League pulse</p>
-                <h3 className="mt-2 font-display text-xl text-ink">Current league state</h3>
+                  </div>
+                  <p className="mt-2 text-sm leading-6 text-ink/68">{post.dek}</p>
+                  <p className="mt-3 text-xs uppercase tracking-[0.18em] text-ink/55">
+                    {post.author.name} · {new Date(post.publishedAt).toLocaleDateString("en-US")}
+                  </p>
+                </Link>
+              ))
+            ) : (
+              <div className="rounded-2xl border border-dashed border-line px-4 py-6 text-sm text-ink/60">
+                No newsroom spotlight is linked to your work yet.
               </div>
-              <span className="font-mono text-xs uppercase tracking-[0.18em] text-ink/45">Tap to expand ↓</span>
-            </div>
-          </summary>
+            )}
+          </div>
+        </article>
 
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <article className="panel p-6">
+          <h3 className="font-display text-2xl text-ink">League pulse</h3>
+          <p className="mt-2 text-sm leading-6 text-ink/70">
+            Keep one eye on the league so your work stays connected to the live world, not just your own draft.
+          </p>
+
+          <div className="mt-6 grid gap-4 sm:grid-cols-2">
             <div className="rounded-2xl border border-line bg-white/65 p-4">
-              <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Active Ruleset</p>
+              <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Active ruleset</p>
               <p className="mt-3 font-display text-3xl text-ink">v{currentSeason?.activeRuleSet.version ?? "–"}</p>
             </div>
             <div className="rounded-2xl border border-line bg-white/65 p-4">
@@ -235,57 +541,33 @@ export function StudentDashboard({ viewer, linkedTeam, openProjects, openProposa
               <p className="mt-3 font-display text-3xl text-ink">{currentSeason?.year ?? "–"}</p>
             </div>
             <div className="rounded-2xl border border-line bg-white/65 p-4">
-              <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Parity Index</p>
+              <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Parity index</p>
               <p className="mt-3 font-display text-3xl text-ink">{metrics.parityIndex.toFixed(1)}</p>
             </div>
             <div className="rounded-2xl border border-line bg-white/65 p-4">
-              <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Revenue Inequality</p>
+              <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Revenue inequality</p>
               <p className="mt-3 font-display text-3xl text-ink">{metrics.revenueInequality.toFixed(2)}</p>
             </div>
           </div>
 
-          <div className="mt-4 flex flex-wrap gap-3">
-            <Link href="/issues" className="rounded-full border border-line bg-white/70 px-4 py-2 text-sm font-medium text-ink">
-              Browse issues
-            </Link>
-            <Link href="/teams" className="rounded-full border border-line bg-white/70 px-4 py-2 text-sm font-medium text-ink">
-              Team snapshots
-            </Link>
-            <Link href="/research" className="rounded-full border border-line bg-white/70 px-4 py-2 text-sm font-medium text-ink">
-              Research archive
-            </Link>
+          <div className="mt-6 space-y-3">
+            {activity.slice(0, 4).map((event) => (
+              <Link
+                key={event.id}
+                href={eventHref(event.entityType, event.entityId)}
+                className="block rounded-2xl border border-line bg-white/60 p-4 hover:border-accent"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <p className="font-medium text-ink">{event.title}</p>
+                  <p className="font-mono text-xs uppercase tracking-[0.18em] text-ink/55">
+                    {new Date(event.createdAt).toLocaleDateString("en-US")}
+                  </p>
+                </div>
+                <p className="mt-2 text-sm leading-6 text-ink/68">{event.summary}</p>
+              </Link>
+            ))}
           </div>
-        </details>
-      </section>
-
-      {/* Recent activity */}
-      <section className="panel p-6">
-        <h3 className="font-display text-2xl text-ink">Recent activity</h3>
-        <p className="mt-2 text-sm leading-6 text-ink/70">
-          All league events — issues, proposals, projects, and commissioner actions.
-        </p>
-
-        <div className="mt-6 space-y-4">
-          {activity.map((event) => (
-            <Link
-              key={event.id}
-              href={eventHref(event.entityType, event.entityId)}
-              className="block rounded-2xl border border-line bg-white/55 p-4 hover:border-accent"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="font-medium text-ink">{event.title}</p>
-                <p className="font-mono text-xs uppercase tracking-[0.2em] text-ink/55">
-                  {new Date(event.createdAt).toLocaleDateString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric"
-                  })}
-                </p>
-              </div>
-              <p className="mt-2 text-sm leading-6 text-ink/68">{event.summary}</p>
-            </Link>
-          ))}
-        </div>
+        </article>
       </section>
     </div>
   );

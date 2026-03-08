@@ -2,12 +2,24 @@ import { notFound } from "next/navigation";
 
 import { ProjectStudioForm } from "@/components/project-studio-form";
 import { SectionHeading } from "@/components/section-heading";
+import { prisma } from "@/lib/prisma";
+import {
+  hasStudentSubmittedProject,
+  shouldUseBeginnerProjectMode
+} from "@/lib/student-flow";
 import { updateProjectAction } from "@/server/actions";
 import { getViewer, requireUser } from "@/server/auth";
 import { getProjectStudioData, parseProjectJson } from "@/server/data";
 
-export default async function EditProjectPage({ params }: { params: Promise<{ projectId: string }> }) {
+export default async function EditProjectPage({
+  params,
+  searchParams
+}: {
+  params: Promise<{ projectId: string }>;
+  searchParams?: Promise<{ beginner?: string; studio?: string; repair?: string }>;
+}) {
   const { projectId } = await params;
+  const resolvedSearchParams = (await searchParams) ?? {};
   const [viewer, studioData] = await Promise.all([getViewer(), getProjectStudioData(projectId)]);
   const { project, issues, teams, users, proposals } = studioData;
 
@@ -22,13 +34,36 @@ export default async function EditProjectPage({ params }: { params: Promise<{ pr
   }
 
   const parsed = parseProjectJson(project);
+  const studentProjects =
+    viewer?.role === "STUDENT"
+      ? await prisma.project.findMany({
+          where: {
+            createdByUserId: viewer.id
+          },
+          select: {
+            submissionStatus: true
+          }
+        })
+      : [];
+  const beginnerMode =
+    viewer?.role === "STUDENT"
+      ? shouldUseBeginnerProjectMode({
+          hasSubmittedProject: hasStudentSubmittedProject(studentProjects),
+          currentProjectStatus: project.submissionStatus,
+          forceFullStudio: resolvedSearchParams.studio === "full"
+        })
+      : false;
 
   return (
     <div className="space-y-8">
       <SectionHeading
-        eyebrow="Project Studio"
-        title={`Revise ${project.title}`}
-        description="This route reopens the adaptive project coach so students can strengthen the lane-specific sections, improve weak evidence or analysis, and resubmit a more publication-ready project."
+        eyebrow={beginnerMode ? "First Project Guide" : "Project Studio"}
+        title={beginnerMode ? `Keep building ${project.title}` : `Revise ${project.title}`}
+        description={
+          beginnerMode
+            ? "This route reopens the guided first-project flow so students can fix one question at a time, keep moving, and submit without getting buried in advanced fields."
+            : "This route reopens the adaptive project coach so students can strengthen the lane-specific sections, improve weak evidence or analysis, and resubmit a more publication-ready project."
+        }
       />
 
       <ProjectStudioForm
@@ -39,6 +74,15 @@ export default async function EditProjectPage({ params }: { params: Promise<{ pr
         users={users}
         proposals={proposals}
         intentLabel="Resubmit for review"
+        beginnerMode={beginnerMode}
+        repairItems={project.feedbackEntries
+          .filter((entry) => entry.createdAt.getTime() >= project.updatedAt.getTime())
+          .map((entry) => ({
+            id: entry.id,
+            sectionKey: entry.sectionKey,
+            body: entry.body,
+            createdBy: entry.createdBy
+          }))}
         initial={{
           id: project.id,
           title: project.title,

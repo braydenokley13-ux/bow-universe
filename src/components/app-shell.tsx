@@ -10,6 +10,8 @@ import { SignOutButton } from "./sign-out-button";
 const navItems = [
   { href: "/", label: "Home", icon: "Home" as const },
   { href: "/start", label: "Start", icon: "Compass" as const },
+  { href: "/news", label: "News", icon: "Newspaper" as const },
+  { href: "/challenges", label: "Challenges", icon: "Trophy" as const },
   { href: "/teams", label: "Teams", icon: "Users" as const },
   { href: "/rules", label: "Rules", icon: "BookOpen" as const },
   { href: "/issues", label: "Issues", icon: "AlertCircle" as const },
@@ -59,6 +61,22 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
                       {viewer.role}
                     </span>
                   </div>
+                  {viewer.role === "STUDENT" && (
+                    <>
+                      <Link
+                        href="/"
+                        className="hidden rounded-full border border-accent px-3 py-1.5 text-sm font-medium text-accent transition hover:bg-accent hover:text-white sm:block"
+                      >
+                        Mission control
+                      </Link>
+                      <Link
+                        href="/students/me"
+                        className="hidden rounded-full border border-line bg-white/70 px-3 py-1.5 text-sm font-medium text-ink transition hover:border-accent md:block"
+                      >
+                        Portfolio
+                      </Link>
+                    </>
+                  )}
                   <SignOutButton />
                 </>
               ) : (

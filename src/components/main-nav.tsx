@@ -10,7 +10,9 @@ import {
   FlaskConical,
   FolderKanban,
   Home,
+  Newspaper,
   Settings,
+  Trophy,
   Users
 } from "lucide-react";
 
@@ -19,6 +21,8 @@ import { cn } from "@/lib/utils";
 const iconMap = {
   Home,
   Compass,
+  Newspaper,
+  Trophy,
   Users,
   BookOpen,
   AlertCircle,

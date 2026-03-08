@@ -11,6 +11,7 @@ import { Badge } from "@/components/badge";
 import { PublicationExportCard } from "@/components/publication-export-card";
 import { PublicationReadinessCard } from "@/components/publication-readiness-card";
 import { SectionHeading } from "@/components/section-heading";
+import { getPublicationDisplayLabel } from "@/lib/publications";
 import {
   reviewProjectAction,
   reviewProposalAction,
@@ -19,7 +20,7 @@ import {
 import { requireAdmin } from "@/server/auth";
 import { getAdminPublicationsData } from "@/server/data";
 import { getPublicationQueueState } from "@/lib/publication-queue";
-import { publicationTypeLabels, submissionStatusLabels } from "@/lib/types";
+import { submissionStatusLabels } from "@/lib/types";
 
 const projectReviewStatuses: SubmissionStatus[] = [
   SubmissionStatus.REVISION_REQUESTED,
@@ -118,7 +119,13 @@ export default async function AdminPublicationsPage() {
                       <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Source workflow</p>
                       <h3 className="mt-3 font-display text-2xl text-ink">Keep the source record aligned</h3>
                     </div>
-                    <Badge>{publicationTypeLabels[publication.publicationType]}</Badge>
+                    <Badge>
+                      {getPublicationDisplayLabel({
+                        publicationType: publication.publicationType,
+                        sourceType: publication.sourceType,
+                        lanePrimary: publication.lanePrimary
+                      })}
+                    </Badge>
                   </div>
 
                   <div className="mt-4 text-sm leading-6 text-ink/68">

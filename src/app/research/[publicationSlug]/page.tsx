@@ -6,8 +6,7 @@ import { Badge } from "@/components/badge";
 import { PrintButton } from "@/components/print-button";
 import { SectionHeading } from "@/components/section-heading";
 import { SourceLineageCard } from "@/components/source-lineage-card";
-import { getLaneLabel } from "@/lib/publications";
-import { publicationTypeLabels } from "@/lib/types";
+import { getLaneLabel, getPublicationDisplayLabel } from "@/lib/publications";
 import {
   getPublicationPageData,
   parseProjectJson,
@@ -42,7 +41,13 @@ export default async function PublicationDetailPage({
         <section className="panel p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge>{publicationTypeLabels[publication.publicationType]}</Badge>
+              <Badge>
+                {getPublicationDisplayLabel({
+                  publicationType: publication.publicationType,
+                  sourceType: publication.sourceType,
+                  lanePrimary: publication.lanePrimary
+                })}
+              </Badge>
               {publication.lanePrimary ? <Badge>{getLaneLabel(publication.lanePrimary)}</Badge> : null}
               {publication.externalReady ? <Badge tone="success">External ready</Badge> : null}
             </div>
@@ -154,7 +159,13 @@ export default async function PublicationDetailPage({
       <section className="panel p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge>{publicationTypeLabels[publication.publicationType]}</Badge>
+            <Badge>
+              {getPublicationDisplayLabel({
+                publicationType: publication.publicationType,
+                sourceType: publication.sourceType,
+                lanePrimary: publication.lanePrimary
+              })}
+            </Badge>
             {publication.externalReady ? <Badge tone="success">External ready</Badge> : null}
           </div>
           <PrintButton />

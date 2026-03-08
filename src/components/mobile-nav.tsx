@@ -12,7 +12,9 @@ import {
   FolderKanban,
   Home,
   Menu,
+  Newspaper,
   Settings,
+  Trophy,
   Users,
   X
 } from "lucide-react";
@@ -20,6 +22,8 @@ import {
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   Home,
   Compass,
+  Newspaper,
+  Trophy,
   Users,
   BookOpen,
   AlertCircle,
