@@ -1,9 +1,13 @@
 import Link from "next/link";
 
 import { Badge } from "@/components/badge";
+import { AdminChallengeDesk } from "@/components/admin-challenge-desk";
+import { AdminClassCodeManager } from "@/components/admin-class-code-manager";
+import { AdminStudentMomentumDesk } from "@/components/admin-student-momentum-desk";
 import { SectionHeading } from "@/components/section-heading";
 import { AdminDecisionDesk } from "@/components/admin-decision-desk";
 import { AdminIssueWorkbench } from "@/components/admin-issue-workbench";
+import { AdminNewsroomDesk } from "@/components/admin-newsroom-desk";
 import { AdminProposalWorkflowCard } from "@/components/admin-proposal-workflow-card";
 import { AdminQueueSummary } from "@/components/admin-queue-summary";
 import { AdminRoleCard } from "@/components/admin-role-card";
@@ -18,8 +22,14 @@ import {
 } from "@/server/actions";
 import { requireAdmin } from "@/server/auth";
 import { getAdminPageData } from "@/server/data";
+import {
+  createChallengeAction,
+  createClassCodeAction,
+  createNewsPostAction
+} from "@/server/community-actions";
 import { getProposalReviewReadiness } from "@/lib/review-readiness";
 import { shouldShowDecisionDesk } from "@/lib/workflow-guards";
+import { getAdminShowcaseData } from "@/server/showcase-data";
 
 export default async function AdminPage({
   searchParams
@@ -28,7 +38,10 @@ export default async function AdminPage({
 }) {
   await requireAdmin();
   const resolvedSearchParams = (await searchParams) ?? {};
-  const { users, issues, proposals, currentSeason, rulesets, teams, activity, publications } = await getAdminPageData();
+  const [
+    { users, issues, proposals, currentSeason, rulesets, teams, activity, publications },
+    showcaseData
+  ] = await Promise.all([getAdminPageData(), getAdminShowcaseData()]);
   const activationBaseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
 
   const proposalReadiness = new Map(
@@ -98,6 +111,13 @@ export default async function AdminPage({
             detail: "Archive records that still need external readiness or export queue attention.",
             href: "/admin/publications",
             tone: publicationQueue.length > 0 ? "warn" : "success"
+          },
+          {
+            title: "Student momentum",
+            count: showcaseData.studentMomentum.totalFlagged,
+            detail: "Students who have not started, stalled in draft, or are sitting on revision feedback.",
+            href: "#student-momentum",
+            tone: showcaseData.studentMomentum.totalFlagged > 0 ? "warn" : "success"
           }
         ]}
       />
@@ -128,6 +148,26 @@ export default async function AdminPage({
         studentEmail={resolvedSearchParams.studentEmail}
         teams={teams}
         students={students}
+      />
+
+      <AdminStudentMomentumDesk momentum={showcaseData.studentMomentum} />
+
+      <AdminClassCodeManager
+        action={createClassCodeAction}
+        teams={teams}
+        classCodes={showcaseData.classCodes}
+      />
+
+      <AdminNewsroomDesk
+        action={createNewsPostAction}
+        posts={showcaseData.newsPosts}
+      />
+
+      <AdminChallengeDesk
+        action={createChallengeAction}
+        issues={issues}
+        teams={teams}
+        challenges={showcaseData.challenges}
       />
 
       <div id="issue-workbench">

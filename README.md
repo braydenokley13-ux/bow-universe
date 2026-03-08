@@ -1,10 +1,10 @@
 # BOW Universe
 
-BOW Universe is a calm, research-first fictional sports-economy league for grades 5 through 8. It is built as one persistent Next.js app where students investigate league issues, publish projects, model policy proposals, vote, and review commissioner decisions across a fictional 12-team world.
+BOW Universe is a research-first fictional sports-economy league for grades 5 through 8. Students investigate league issues, build projects across four lanes, draft formal proposal memos, respond to feedback, join research challenges, and publish work inside one persistent Next.js app.
 
 ## Stack
 
-- Next.js 14 App Router
+- Next.js 16 App Router
 - TypeScript
 - Tailwind CSS
 - Prisma ORM
@@ -12,16 +12,15 @@ BOW Universe is a calm, research-first fictional sports-economy league for grade
 - NextAuth credentials auth
 - Vercel-ready deployment shape
 
-## Core Features
+## Core Product Areas
 
-- League dashboard with active ruleset, season state, league metrics, and archive feed
-- 12-team fictional league with team finance snapshots and cap tables
-- Versioned rulesets with readable history and diffs
-- Issues board with linked projects and proposals
-- Project registry covering all four lanes inside one shared world
-- Proposal workflow with structured rule diffs, sandbox modeling, voting, and commissioner decisions
-- Admin console for issues, roles, voting windows, decisions, and season advancement
-- Deterministic season simulation engine with threshold-based issue generation
+- Student mission control with recommended next actions, feedback queue, voting windows, and challenge activity
+- Beginner-friendly project studio with autosave, repair links, and lane-specific coaching
+- Formal proposal memo workflow with rule diffs, sandbox modeling, voting, and commissioner decisions
+- Commissioner-managed invites plus student self-signup with reusable class codes
+- League newsroom combining commissioner-written stories with auto-generated league activity
+- Student research challenges with challenge entries, milestone scoring, and spotlight bonuses
+- Research archive and publication queue for internal and external readiness
 
 ## Local Setup
 
@@ -31,23 +30,19 @@ BOW Universe is a calm, research-first fictional sports-economy league for grade
 npm install
 ```
 
-2. Copy the environment template and adjust values if needed:
+2. Copy the environment template:
 
 ```bash
 cp .env.example .env.local
 ```
 
-3. Start PostgreSQL.
-
-If you already have PostgreSQL running locally on port `5432`, create a database named `bow_universe`.
-
-If you want to use the checked-in local cluster directory, you can start it with:
+3. Start the bundled local PostgreSQL cluster:
 
 ```bash
-pg_ctl -D .postgres/data -l .postgres/logs/server.log -o "-c shared_memory_type=mmap -c dynamic_shared_memory_type=posix" start
+npm run db:start
 ```
 
-4. Apply the schema:
+4. Apply database migrations:
 
 ```bash
 set -a
@@ -56,7 +51,7 @@ set +a
 npx prisma migrate deploy
 ```
 
-5. Seed the universe:
+5. Seed the demo universe:
 
 ```bash
 set -a
@@ -71,27 +66,37 @@ npm run prisma:seed
 npm run dev
 ```
 
-## Seeded Logins
+## Useful Local Commands
+
+```bash
+npm run db:status
+npm run db:stop
+npm run prisma:generate
+npm run prisma:validate
+npm run check
+```
+
+`npm run check` runs lint, tests, production build, and Prisma schema validation in one pass.
+
+## Demo Access
 
 - Commissioner: `commissioner@bow.local` / `bowuniverse`
 - Student: `riya-patel@bow.local` / `bowuniverse`
 
-## Test And Validation Commands
+Students can also sign up from `/signup` with a commissioner-created class code.
 
-```bash
-npx vitest run
-npm run build
-set -a && source .env.local && set +a && npx prisma validate
-```
+## Environment Variables
 
-## Deploying To Vercel
+- `DATABASE_URL`: PostgreSQL connection string used by Prisma
+- `NEXTAUTH_SECRET`: secret for credentials auth sessions
+- `NEXTAUTH_URL`: canonical app URL used for auth and invite links
+- `NEXT_SERVER_ACTION_ORIGINS`: comma-separated allowed origins for Next.js server actions; include local hosts and any deployed domains that submit forms back to the app
 
-1. Create a PostgreSQL database on Neon, Vercel Postgres, or another Vercel-compatible provider.
-2. Set these environment variables in Vercel:
-   - `DATABASE_URL`
-   - `NEXTAUTH_SECRET`
-   - `NEXTAUTH_URL`
-3. Run Prisma migrations as part of deployment or before the first production boot:
+## Deployment Notes
+
+1. Create a PostgreSQL database on Neon, Vercel Postgres, or another PostgreSQL provider.
+2. Set `DATABASE_URL`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, and `NEXT_SERVER_ACTION_ORIGINS` in Vercel.
+3. Run migrations during deploy or before first production boot:
 
 ```bash
 npx prisma migrate deploy
@@ -103,8 +108,10 @@ npx prisma migrate deploy
 npm run prisma:seed
 ```
 
-## Important Notes
+For Vercel previews, include the preview domain in `NEXT_SERVER_ACTION_ORIGINS` if form posts need to come from more than the canonical `NEXTAUTH_URL`.
 
-- The app is intentionally not a video game and avoids arcade copy or player-ratings presentation.
-- The four lanes are modeled as project types and lane tags inside one app.
-- No unlock-code mechanics are included anywhere in the product.
+## Notes
+
+- Project lanes are project work. Formal proposal memos live in `/proposals`.
+- The app is intentionally research-first and avoids arcade-style presentation.
+- The checked-in `.postgres` directory is the standard local development database for this repo.

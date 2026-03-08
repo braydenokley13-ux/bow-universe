@@ -15,9 +15,9 @@ import {
   getIssuesPageData,
   getProjectsPageData,
   getProposalsPageData,
-  getResearchPageData,
-  getStudentDashboardData
+  getResearchPageData
 } from "@/server/data";
+import { getStudentMissionControlData } from "@/server/showcase-data";
 
 function eventHref(entityType: string | null, entityId: string | null) {
   if (!entityType || !entityId) return "#";
@@ -59,7 +59,7 @@ export default async function HomePage() {
   }
 
   if (viewer.role === "STUDENT") {
-    const [userRecord, { openProjects, openProposals }, league] = await Promise.all([
+    const [userRecord, missionControl, league] = await Promise.all([
       prisma.user.findUnique({
         where: { id: viewer.id },
         select: {
@@ -72,25 +72,38 @@ export default async function HomePage() {
           }
         }
       }),
-      getStudentDashboardData(viewer.id),
+      getStudentMissionControlData(viewer.id),
       getDashboardData()
     ]);
 
     const isFirstTime =
       !userRecord?.onboardingCompletedAt &&
-      openProjects.length === 0 &&
-      openProposals.length === 0;
+      missionControl.openProjects.length === 0 &&
+      missionControl.openProposals.length === 0;
 
     if (isFirstTime) {
-      return <OnboardingWizard />;
+      return (
+        <OnboardingWizard
+          missions={missionControl.missionCandidates}
+          markOnboardingComplete
+          linkedTeamName={userRecord?.linkedTeam?.name ?? null}
+        />
+      );
     }
 
     return (
       <StudentDashboard
         viewer={viewer}
         linkedTeam={userRecord?.linkedTeam ?? null}
-        openProjects={openProjects}
-        openProposals={openProposals}
+        recommendedAction={missionControl.recommendedAction}
+        recommendedMission={missionControl.recommendedMission}
+        openProjects={missionControl.openProjects}
+        openProposals={missionControl.openProposals}
+        feedbackItems={missionControl.feedbackItems}
+        votingProposals={missionControl.votingProposals}
+        challengeEntries={missionControl.challengeEntries}
+        spotlightPosts={missionControl.spotlightPosts}
+        submittedFirstProject={missionControl.submittedFirstProject}
         league={league}
       />
     );

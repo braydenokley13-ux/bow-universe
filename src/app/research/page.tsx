@@ -2,8 +2,7 @@ import Link from "next/link";
 
 import { Badge } from "@/components/badge";
 import { SectionHeading } from "@/components/section-heading";
-import { getLaneLabel } from "@/lib/publications";
-import { publicationTypeLabels } from "@/lib/types";
+import { getLaneLabel, getPublicationDisplayLabel } from "@/lib/publications";
 import { getResearchPageData } from "@/server/data";
 
 type BrowseMode = "recent" | "lane" | "type" | "context";
@@ -14,7 +13,11 @@ function groupLabel(mode: BrowseMode, publication: Awaited<ReturnType<typeof get
   }
 
   if (mode === "type") {
-    return publicationTypeLabels[publication.publicationType];
+    return getPublicationDisplayLabel({
+      publicationType: publication.publicationType,
+      sourceType: publication.sourceType,
+      lanePrimary: publication.lanePrimary
+    });
   }
 
   if (mode === "context") {
@@ -97,7 +100,13 @@ export default async function ResearchPage({
                 className="panel block p-6 hover:border-accent"
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge>{publicationTypeLabels[publication.publicationType]}</Badge>
+                  <Badge>
+                    {getPublicationDisplayLabel({
+                      publicationType: publication.publicationType,
+                      sourceType: publication.sourceType,
+                      lanePrimary: publication.lanePrimary
+                    })}
+                  </Badge>
                   {publication.lanePrimary ? <Badge>{getLaneLabel(publication.lanePrimary)}</Badge> : null}
                   {publication.externalReady ? <Badge tone="success">External ready</Badge> : null}
                 </div>

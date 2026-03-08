@@ -5,6 +5,12 @@ import { ProjectType } from "@prisma/client";
 import { Badge } from "@/components/badge";
 import { ProjectStudioForm } from "@/components/project-studio-form";
 import { SectionHeading } from "@/components/section-heading";
+import { prisma } from "@/lib/prisma";
+import { parseProjectStudioPrefill } from "@/lib/studio-entry";
+import {
+  hasStudentSubmittedProject,
+  shouldUseBeginnerProjectMode
+} from "@/lib/student-flow";
 import type { LaneTag } from "@/lib/types";
 import { createProjectAction } from "@/server/actions";
 import { getViewer } from "@/server/auth";
@@ -20,22 +26,53 @@ const validLanes: LaneTag[] = [
 export default async function NewProjectPage({
   searchParams
 }: {
-  searchParams?: Promise<{ lane?: string }>;
+  searchParams?: Promise<{
+    lane?: string;
+    issueId?: string;
+    teamId?: string;
+    supportingProposalId?: string;
+    beginner?: string;
+    studio?: string;
+  }>;
 }) {
   const viewer = await getViewer();
-  const { issues, teams, users, proposals } = await getProjectStudioData();
   const resolvedSearchParams = (await searchParams) ?? {};
-  const requestedLane = resolvedSearchParams.lane as LaneTag | undefined;
-  const lanePrimary = validLanes.includes(requestedLane ?? "ECONOMIC_INVESTIGATORS")
-    ? (requestedLane as LaneTag)
+  const [studioData, studentProjects] = await Promise.all([
+    getProjectStudioData(),
+    viewer?.role === "STUDENT"
+      ? prisma.project.findMany({
+          where: {
+            createdByUserId: viewer.id
+          },
+          select: {
+            submissionStatus: true
+          }
+        })
+      : Promise.resolve([])
+  ]);
+  const { issues, teams, users, proposals } = studioData;
+  const prefill = parseProjectStudioPrefill(resolvedSearchParams);
+  const beginnerMode =
+    viewer?.role === "STUDENT"
+      ? shouldUseBeginnerProjectMode({
+          hasSubmittedProject: hasStudentSubmittedProject(studentProjects),
+          forceFullStudio: resolvedSearchParams.studio === "full"
+        })
+      : false;
+  const lanePrimary = validLanes.includes(prefill.lanePrimary ?? "ECONOMIC_INVESTIGATORS")
+    ? (prefill.lanePrimary as LaneTag)
     : "ECONOMIC_INVESTIGATORS";
 
   return (
     <div className="space-y-8">
       <SectionHeading
-        eyebrow="Project Coach"
-        title="Adaptive lane-by-lane project wizard"
-        description="This studio now coaches every lane one small step at a time. Tool Builders, Policy Reform Architects, Strategic Operators, and Economic Investigators each get lane-specific prompts, section coaching, and a stronger review gate before anything is submitted."
+        eyebrow={beginnerMode ? "First Project Guide" : "Project Coach"}
+        title={beginnerMode ? "One question at a time" : "Adaptive lane-by-lane project wizard"}
+        description={
+          beginnerMode
+            ? "This version keeps the work small. Pick an issue, answer one guided question at a time, and the studio will build the formal project fields for you before you submit."
+            : "This studio now coaches every lane one small step at a time. Tool Builders, Policy Reform Architects, Strategic Operators, and Economic Investigators each get lane-specific prompts, section coaching, and a stronger review gate before anything is submitted. Reform-support project work stays here, while formal proposal memos stay in the separate proposal studio."
+        }
       />
 
       {viewer ? (
@@ -51,6 +88,7 @@ export default async function NewProjectPage({
             users={users}
             proposals={proposals}
             intentLabel="Submit for review"
+            beginnerMode={beginnerMode}
             initial={{
               title: "",
               summary: "",
@@ -67,9 +105,9 @@ export default async function NewProjectPage({
                       : ProjectType.INVESTIGATION,
               lanePrimary,
               laneTags: [lanePrimary],
-              issueIds: [],
-              teamId: "",
-              supportingProposalId: "",
+              issueIds: prefill.issueIds,
+              teamId: prefill.teamId,
+              supportingProposalId: prefill.supportingProposalId,
               artifactLinks: [],
               references: [],
               keywords: [],

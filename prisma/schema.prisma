@@ -98,6 +98,20 @@ enum ExternalPublicationTarget {
   PDF
 }
 
+enum ChallengeEntryType {
+  PROJECT
+  PROPOSAL
+  EITHER
+}
+
+enum ChallengeScoreEventKind {
+  JOIN
+  SUBMIT
+  APPROVED_INTERNAL
+  PUBLISHED_INTERNAL
+  SPOTLIGHT
+}
+
 model User {
   id                    String                 @id @default(cuid())
   name                  String
@@ -106,10 +120,12 @@ model User {
   role                  UserRole               @default(STUDENT)
   linkedTeamId          String?
   commissionerId        String?
+  signedUpViaClassCodeId String?
   createdAt             DateTime               @default(now())
   onboardingCompletedAt DateTime?
   linkedTeam            Team?                  @relation("LinkedStudentTeam", fields: [linkedTeamId], references: [id], onDelete: SetNull)
   commissioner          User?                  @relation("CommissionerLinkedStudents", fields: [commissionerId], references: [id], onDelete: SetNull)
+  signedUpViaClassCode  ClassCode?             @relation("ClassCodeSignups", fields: [signedUpViaClassCodeId], references: [id], onDelete: SetNull)
   linkedStudents        User[]                 @relation("CommissionerLinkedStudents")
   createdRuleSets       RuleSet[]              @relation("RuleSetCreatedBy")
   createdProposals      Proposal[]             @relation("ProposalCreatedBy")
@@ -127,9 +143,15 @@ model User {
   publishedPublications Publication[]          @relation("PublicationPublishedBy")
   createdStudentInvites StudentInvite[]        @relation("StudentInviteCreatedBy")
   studentInvites        StudentInvite[]        @relation("StudentInviteUser")
+  createdClassCodes     ClassCode[]            @relation("ClassCodeCreatedBy")
+  authoredNewsPosts     NewsPost[]             @relation("NewsPostAuthoredBy")
+  createdChallenges     Challenge[]            @relation("ChallengeCreatedBy")
+  challengeEntries      ChallengeEntry[]       @relation("ChallengeEntryByUser")
+  challengeScoreEvents  ChallengeScoreEvent[]  @relation("ChallengeScoreEventByUser")
 
   @@index([linkedTeamId])
   @@index([commissionerId])
+  @@index([signedUpViaClassCodeId])
 }
 
 model Team {
@@ -146,6 +168,8 @@ model Team {
   issues               Issue[]
   publications         Publication[]
   linkedStudents       User[]       @relation("LinkedStudentTeam")
+  classCodes           ClassCode[]
+  challenges           Challenge[]
 }
 
 model StudentInvite {
@@ -162,6 +186,25 @@ model StudentInvite {
   @@index([userId, createdAt])
   @@index([createdByUserId, createdAt])
   @@index([usedAt])
+}
+
+model ClassCode {
+  id              String   @id @default(cuid())
+  code            String   @unique
+  label           String
+  description     String?
+  commissionerId  String
+  linkedTeamId    String?
+  active          Boolean  @default(true)
+  expiresAt       DateTime?
+  createdAt       DateTime @default(now())
+  commissioner    User     @relation("ClassCodeCreatedBy", fields: [commissionerId], references: [id], onDelete: Cascade)
+  linkedTeam      Team?    @relation(fields: [linkedTeamId], references: [id], onDelete: SetNull)
+  signups         User[]   @relation("ClassCodeSignups")
+
+  @@index([commissionerId, createdAt])
+  @@index([linkedTeamId])
+  @@index([active, expiresAt])
 }
 
 model Season {
@@ -326,6 +369,7 @@ model Issue {
   primaryProjects Project[]    @relation("PrimaryProjectIssue")
   projectLinks    ProjectIssue[]
   publications    Publication[]
+  challenges      Challenge[]
 
   @@index([status])
   @@index([severity])
@@ -552,4 +596,86 @@ model ActivityEvent {
   @@index([entityType, entityId])
   @@index([createdAt])
   @@index([createdByUserId])
+}
+
+model NewsPost {
+  id               String   @id @default(cuid())
+  slug             String   @unique
+  headline         String
+  dek              String
+  bodyMd           String
+  linkedEntityType String?
+  linkedEntityId   String?
+  pinned           Boolean  @default(false)
+  publishedAt      DateTime @default(now())
+  createdAt        DateTime @default(now())
+  authorUserId     String
+  author           User     @relation("NewsPostAuthoredBy", fields: [authorUserId], references: [id], onDelete: Cascade)
+
+  @@index([publishedAt])
+  @@index([pinned, publishedAt])
+  @@index([linkedEntityType, linkedEntityId])
+  @@index([authorUserId, createdAt])
+}
+
+model Challenge {
+  id               String             @id @default(cuid())
+  slug             String             @unique
+  title            String
+  summary          String
+  prompt           String
+  scoringNotesMd   String?
+  laneTag          LaneTag?
+  issueId          String?
+  teamId           String?
+  allowedEntryType ChallengeEntryType @default(EITHER)
+  startsAt         DateTime
+  endsAt           DateTime
+  active           Boolean            @default(true)
+  createdAt        DateTime           @default(now())
+  createdByUserId  String
+  createdBy        User               @relation("ChallengeCreatedBy", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  issue            Issue?             @relation(fields: [issueId], references: [id], onDelete: SetNull)
+  team             Team?              @relation(fields: [teamId], references: [id], onDelete: SetNull)
+  entries          ChallengeEntry[]
+
+  @@index([createdByUserId, createdAt])
+  @@index([issueId])
+  @@index([teamId])
+  @@index([laneTag])
+  @@index([active, startsAt, endsAt])
+}
+
+model ChallengeEntry {
+  id           String                @id @default(cuid())
+  challengeId  String
+  userId       String
+  sourceType   PublicationSourceType
+  sourceId     String
+  joinedAt     DateTime              @default(now())
+  spotlightedAt DateTime?
+  challenge    Challenge             @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  user         User                  @relation("ChallengeEntryByUser", fields: [userId], references: [id], onDelete: Cascade)
+  scoreEvents  ChallengeScoreEvent[]
+
+  @@unique([challengeId, userId])
+  @@unique([challengeId, sourceType, sourceId])
+  @@index([userId, joinedAt])
+  @@index([sourceType, sourceId])
+}
+
+model ChallengeScoreEvent {
+  id              String                  @id @default(cuid())
+  challengeEntryId String
+  kind            ChallengeScoreEventKind
+  points          Int
+  note            String?
+  createdAt       DateTime                @default(now())
+  createdByUserId String?
+  challengeEntry  ChallengeEntry          @relation(fields: [challengeEntryId], references: [id], onDelete: Cascade)
+  createdBy       User?                   @relation("ChallengeScoreEventByUser", fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([challengeEntryId, kind])
+  @@index([createdByUserId, createdAt])
+  @@index([kind, createdAt])
 }

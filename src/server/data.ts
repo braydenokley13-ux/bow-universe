@@ -616,7 +616,19 @@ export async function getProjectStudioData(projectId?: string) {
           where: { id: projectId },
           include: {
             issueLinks: true,
-            collaborators: true
+            collaborators: true,
+            feedbackEntries: {
+              include: {
+                createdBy: {
+                  select: {
+                    name: true
+                  }
+                }
+              },
+              orderBy: {
+                createdAt: "desc"
+              }
+            }
           }
         })
       : null

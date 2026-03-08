@@ -13,10 +13,10 @@ import {
   reviewProjectAction,
   saveProjectFeedbackAction
 } from "@/server/actions";
-import { getLaneLabel } from "@/lib/publications";
+import { getLaneLabel, getPublicationDisplayLabel } from "@/lib/publications";
 import { getLanePrompt } from "@/lib/discovery-guidance";
 import { getProjectReviewReadiness } from "@/lib/review-readiness";
-import { publicationTypeLabels, submissionStatusLabels } from "@/lib/types";
+import { submissionStatusLabels } from "@/lib/types";
 import { getViewer } from "@/server/auth";
 import { getProjectPageData, parseProjectJson } from "@/server/data";
 
@@ -52,7 +52,12 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
       <section className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <article className="panel p-6">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge>{publicationTypeLabels[project.publicationType]}</Badge>
+            <Badge>
+              {getPublicationDisplayLabel({
+                publicationType: project.publicationType,
+                lanePrimary: parsed.lanePrimary
+              })}
+            </Badge>
             <Badge>{submissionStatusLabels[project.submissionStatus]}</Badge>
             <Badge>{getLaneLabel(parsed.lanePrimary)}</Badge>
             {project.publication?.externalReady ? <Badge tone="success">External ready</Badge> : null}

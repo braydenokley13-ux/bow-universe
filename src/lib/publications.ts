@@ -1,4 +1,10 @@
-import { ProjectType, ProposalStatus, PublicationType, SubmissionStatus } from "@prisma/client";
+import {
+  ProjectType,
+  ProposalStatus,
+  PublicationSourceType,
+  PublicationType,
+  SubmissionStatus
+} from "@prisma/client";
 
 import type {
   ArtifactLink,
@@ -12,7 +18,7 @@ import type {
   ReferenceEntry,
   SubmissionChecklistItem
 } from "@/lib/types";
-import { laneTagLabels } from "@/lib/types";
+import { laneTagLabels, publicationTypeLabels } from "@/lib/types";
 import { slugify } from "@/lib/utils";
 
 type ProjectChecklistArgs = {
@@ -77,33 +83,33 @@ const laneTemplates: Record<LaneTag, LaneTemplateDefinition> = {
     externalReadinessRules: [
       "The title should work for a public audience outside your class.",
       "The abstract should explain the tool without internal classroom wording.",
-      "An outside reader should understand the example output without a teacher nearby."
+      "An outside reader should understand the example output without extra classroom help nearby."
     ]
   },
   POLICY_REFORM_ARCHITECTS: {
     lane: "POLICY_REFORM_ARCHITECTS",
     publicationType: PublicationType.POLICY_MEMO,
-    outputLabel: "Policy Memo",
-    overviewLabel: "Policy summary",
+    outputLabel: "Reform Support Brief",
+    overviewLabel: "Support brief summary",
     steps: [
       "Choose the issue",
       "Explain the rule problem",
-      "Draft the policy memo sections",
-      "Connect the sandbox results",
+      "Draft the support brief sections",
+      "Connect the evidence and proposal context",
       "Review for publication"
     ],
     requiredSections: ["overview", "context", "analysis", "recommendations"],
     checklist: [
-      { key: "title", label: "Focused memo title", detail: "The title should say what reform is being considered." },
-      { key: "abstract", label: "Executive summary", detail: "Readers should understand the reform before they read the full memo." },
-      { key: "context", label: "Current rule context", detail: "Explain the existing rule before you suggest changing it." },
-      { key: "analysis", label: "Impact analysis", detail: "Say who gains, who loses, and why." },
-      { key: "tradeoffs", label: "Tradeoffs included", detail: "A strong memo shows what gets harder too." },
-      { key: "references", label: "References added", detail: "Show the evidence behind the recommendation." }
+      { key: "title", label: "Focused support title", detail: "The title should say what reform pressure the brief is helping explain." },
+      { key: "abstract", label: "Fast summary", detail: "Readers should understand the support brief before they read the full body." },
+      { key: "context", label: "Current rule context", detail: "Explain the existing rule before you show how the support work helps." },
+      { key: "analysis", label: "Impact support", detail: "Say who gains, who loses, and what evidence supports that pattern." },
+      { key: "tradeoffs", label: "Tradeoffs included", detail: "A strong support brief shows what gets harder too." },
+      { key: "references", label: "References added", detail: "Show the evidence behind the support recommendation." }
     ],
     examples: [
       {
-        title: "Strong memo start",
+        title: "Strong support brief start",
         body: "The current second apron threshold slows large-market spending, but it also blocks small-market teams from using planned short-term spending spikes."
       }
     ],
@@ -113,8 +119,8 @@ const laneTemplates: Record<LaneTag, LaneTemplateDefinition> = {
       { key: "tradeoffs", title: "Tradeoffs", prompt: "What new problem might your reform create?" }
     ],
     externalReadinessRules: [
-      "The memo should define BOW-specific terms the first time they appear.",
-      "The recommendation should still make sense if shared as a public-facing article.",
+      "The brief should define BOW-specific terms the first time they appear.",
+      "The support recommendation should still make sense if shared as a public-facing article.",
       "Avoid writing that only classmates would understand."
     ]
   },
@@ -211,6 +217,22 @@ export function getLaneTemplate(lane: LaneTag) {
 
 export function getAllLaneTemplates() {
   return Object.values(laneTemplates);
+}
+
+export function getPublicationDisplayLabel(input: {
+  publicationType: PublicationType;
+  sourceType?: PublicationSourceType | null;
+  lanePrimary?: LaneTag | null;
+}) {
+  if (
+    input.publicationType === PublicationType.POLICY_MEMO &&
+    (input.sourceType === PublicationSourceType.PROJECT ||
+      input.lanePrimary === "POLICY_REFORM_ARCHITECTS")
+  ) {
+    return "Reform Support Brief";
+  }
+
+  return publicationTypeLabels[input.publicationType];
 }
 
 export function getPrimaryLaneTag(
