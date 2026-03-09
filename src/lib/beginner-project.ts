@@ -38,7 +38,7 @@ function withSentence(prefix: string, value: string, fallback: string) {
 
 export function getBeginnerStepIdForField(fieldId: ProjectRepairFieldId): BeginnerProjectStepId {
   switch (fieldId) {
-    case "issueIds":
+    case "issueId":
       return "issue";
     case "lanePrimary":
       return "lane";
@@ -80,7 +80,7 @@ export function isBeginnerStepComplete(
 ) {
   switch (stepId) {
     case "issue":
-      return values.issueIds.length > 0;
+      return values.issueId.trim().length > 0;
     case "lane":
       return Boolean(values.lanePrimary);
     case "question":
@@ -108,7 +108,7 @@ export function beginnerStepHasAnyContent(
 ) {
   switch (stepId) {
     case "issue":
-      return values.issueIds.length > 0;
+      return values.issueId.trim().length > 0;
     case "lane":
       return Boolean(values.lanePrimary);
     case "question":

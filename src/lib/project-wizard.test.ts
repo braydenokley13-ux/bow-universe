@@ -23,7 +23,7 @@ function buildCompleteInvestigationValues() {
     lanePrimary: lane,
     projectType: ProjectType.INVESTIGATION,
     laneTags: [lane],
-    issueIds: ["issue-1"],
+    issueId: "issue-1",
     teamId: "",
     supportingProposalId: "",
     collaboratorIds: [],
@@ -77,6 +77,17 @@ describe("project coach wizard", () => {
 
     expect(assessment.firstIncompleteStepId).toBe("opening");
     expect(assessment.reviewBuckets.blockers.items.some((item) => item.includes("Title"))).toBe(true);
+  });
+
+  it("requires one issue when the student flow asks for it", () => {
+    const assessment = assessProjectCoach(createInitialProjectCoachValues(), {
+      issueRequired: true
+    });
+
+    expect(assessment.firstIncompleteStepId).toBe("context");
+    expect(assessment.fields.issueId.complete).toBe(false);
+    expect(assessment.steps.context.complete).toBe(false);
+    expect(assessment.reviewBuckets.blockers.items.some((item) => item.includes("Primary issue"))).toBe(true);
   });
 
   it("blocks submission when lane-specific sections are unfinished", () => {

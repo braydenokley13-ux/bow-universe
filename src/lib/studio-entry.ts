@@ -32,7 +32,7 @@ export function parseProjectStudioPrefill(searchParams: StudioSearchParams) {
 
   return {
     lanePrimary,
-    issueIds: issueId ? [issueId] : [],
+    issueId,
     teamId,
     supportingProposalId
   };

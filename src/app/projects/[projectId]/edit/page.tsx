@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { ProjectStudioForm } from "@/components/project-studio-form";
+import { resolveProjectPrimaryIssueId } from "@/lib/project-issues";
 import { SectionHeading } from "@/components/section-heading";
 import { prisma } from "@/lib/prisma";
 import {
@@ -69,6 +70,7 @@ export default async function EditProjectPage({
       <ProjectStudioForm
         action={updateProjectAction}
         viewerId={viewer!.id}
+        viewerRole={viewer!.role}
         issues={issues}
         teams={teams}
         users={users}
@@ -93,7 +95,10 @@ export default async function EditProjectPage({
           projectType: project.projectType,
           lanePrimary: parsed.lanePrimary,
           laneTags: parsed.laneTags,
-          issueIds: project.issueLinks.map((link) => link.issueId),
+          issueId: resolveProjectPrimaryIssueId({
+            issueId: project.issueId,
+            issueLinks: project.issueLinks
+          }),
           teamId: project.teamId ?? "",
           supportingProposalId: project.supportingProposalId ?? "",
           artifactLinks: parsed.artifactLinks,

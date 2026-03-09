@@ -18,7 +18,7 @@ describe("studio entry helpers", () => {
       })
     ).toEqual({
       lanePrimary: "TOOL_BUILDERS",
-      issueIds: ["issue-1"],
+      issueId: "issue-1",
       teamId: "team-1",
       supportingProposalId: "proposal-1"
     });
@@ -32,7 +32,7 @@ describe("studio entry helpers", () => {
       })
     ).toEqual({
       lanePrimary: null,
-      issueIds: ["issue-1"],
+      issueId: "issue-1",
       teamId: "",
       supportingProposalId: ""
     });

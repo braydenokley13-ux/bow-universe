@@ -30,6 +30,7 @@ import {
   getSuggestedProposalStatus,
   projectTypeToPublicationType
 } from "@/lib/publications";
+import { buildProjectIssueLinkCreates, resolveProjectPrimaryIssueId } from "@/lib/project-issues";
 import { prisma } from "@/lib/prisma";
 import { parseRuleDiff } from "@/lib/rules";
 import { hasStudentSubmittedProject } from "@/lib/student-flow";
@@ -306,7 +307,10 @@ async function saveProjectRecord(params: {
   }
 
   const intent = String(params.formData.get("intent") ?? "DRAFT");
-  const issueIds = params.formData.getAll("issueIds").map(String).filter(Boolean);
+  const issueId = resolveProjectPrimaryIssueId({
+    issueId: String(params.formData.get("issueId") ?? ""),
+    issueIds: params.formData.getAll("issueIds").map(String).filter(Boolean)
+  });
   const collaboratorIds = params.formData.getAll("collaboratorIds").map(String).filter(Boolean);
   const lanePrimary = parsed.lanePrimary as Parameters<typeof getPrimaryLaneTag>[0][number];
   const laneTags = Array.from(new Set([...params.formData.getAll("laneTags").map(String).filter(Boolean), lanePrimary]));
@@ -394,7 +398,7 @@ async function saveProjectRecord(params: {
           lanePrimary,
           laneTagsJson: asJson(laneTags),
           artifactLinksJson: asJson(artifactLinks),
-          issueId: issueIds[0] ?? null,
+          issueId: issueId || null,
           teamId,
           supportingProposalId,
           findingsMd,
@@ -412,9 +416,7 @@ async function saveProjectRecord(params: {
           ...timestampFields,
           issueLinks: {
             deleteMany: {},
-            create: issueIds.map((issueId) => ({
-              issueId
-            }))
+            create: buildProjectIssueLinkCreates(issueId)
           },
           collaborators: {
             deleteMany: {},
@@ -437,7 +439,7 @@ async function saveProjectRecord(params: {
           lanePrimary,
           laneTagsJson: asJson(laneTags),
           artifactLinksJson: asJson(artifactLinks),
-          issueId: issueIds[0] ?? null,
+          issueId: issueId || null,
           teamId,
           supportingProposalId,
           findingsMd,
@@ -452,9 +454,7 @@ async function saveProjectRecord(params: {
           createdByUserId: params.actor.id,
           ...timestampFields,
           issueLinks: {
-            create: issueIds.map((issueId) => ({
-              issueId
-            }))
+            create: buildProjectIssueLinkCreates(issueId)
           },
           collaborators: {
             create: collaboratorIds.map((userId) => ({
@@ -471,7 +471,7 @@ async function saveProjectRecord(params: {
 
   return {
     project,
-    issueIds,
+    issueId,
     teamId,
     submissionStatus
   };
@@ -698,7 +698,7 @@ export async function createProjectAction(formData: FormData) {
       }
     })
   );
-  const { project, issueIds, teamId, submissionStatus } = await saveProjectRecord({
+  const { project, issueId, teamId, submissionStatus } = await saveProjectRecord({
     formData,
     actor: viewer,
     projectId
@@ -719,7 +719,7 @@ export async function createProjectAction(formData: FormData) {
     entityId: project.id,
     createdByUserId: viewer.id,
     metadata: {
-      issueIds,
+      issueId,
       teamId
     }
   });

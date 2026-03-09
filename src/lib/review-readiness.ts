@@ -1,5 +1,6 @@
 import { Prisma, ProjectType, ProposalStatus, SubmissionStatus } from "@prisma/client";
 
+import { resolveProjectPrimaryIssueId } from "@/lib/project-issues";
 import {
   assessProjectCoach,
   createInitialProjectCoachValues,
@@ -213,10 +214,12 @@ export function getProposalReviewReadiness(proposal: ProposalRecord): ReviewRead
 
 export function getProjectReviewReadiness(project: ProjectRecord): ReviewReadinessResult {
   const parsed = parseProjectJson(project);
-  const issueIds = [
-    ...(project.primaryIssue ? [project.primaryIssue.id] : []),
-    ...((project.issueLinks ?? []).map((link) => link.issueId ?? link.issue?.id ?? "").filter(Boolean) as string[])
-  ];
+  const issueId = resolveProjectPrimaryIssueId({
+    issueId: project.primaryIssue?.id ?? "",
+    issueLinks: (project.issueLinks ?? []).map((link) => ({
+      issueId: link.issueId ?? link.issue?.id ?? ""
+    }))
+  });
   const collaboratorIds = (project.collaborators ?? [])
     .map((collaborator) => collaborator.userId ?? collaborator.user?.id ?? "")
     .filter(Boolean);
@@ -225,7 +228,7 @@ export function getProjectReviewReadiness(project: ProjectRecord): ReviewReadine
       lanePrimary: parsed.lanePrimary,
       projectType: project.projectType,
       laneTags: parsed.laneTags,
-      issueIds,
+      issueId,
       teamId: project.teamId ?? "",
       supportingProposalId: project.supportingProposalId ?? "",
       collaboratorIds,
