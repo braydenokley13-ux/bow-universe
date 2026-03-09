@@ -18,7 +18,7 @@ describe("beginner project helpers", () => {
     const startedValues = createInitialProjectCoachValues({
       lanePrimary: "ECONOMIC_INVESTIGATORS",
       projectType: ProjectType.INVESTIGATION,
-      issueIds: ["issue-1"],
+      issueId: "issue-1",
       essentialQuestion: "How is the tax system changing team flexibility?"
     });
 
@@ -28,7 +28,7 @@ describe("beginner project helpers", () => {
   });
 
   it("maps project fields back to the guided beginner questions", () => {
-    expect(getBeginnerStepIdForField("issueIds")).toBe("issue");
+    expect(getBeginnerStepIdForField("issueId")).toBe("issue");
     expect(getBeginnerStepIdForField("lanePrimary")).toBe("lane");
     expect(getBeginnerStepIdForField("references")).toBe("references");
   });

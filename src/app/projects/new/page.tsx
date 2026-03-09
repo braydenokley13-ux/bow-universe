@@ -83,6 +83,7 @@ export default async function NewProjectPage({
           <ProjectStudioForm
             action={createProjectAction}
             viewerId={viewer.id}
+            viewerRole={viewer.role}
             issues={issues}
             teams={teams}
             users={users}
@@ -105,7 +106,7 @@ export default async function NewProjectPage({
                       : ProjectType.INVESTIGATION,
               lanePrimary,
               laneTags: [lanePrimary],
-              issueIds: prefill.issueIds,
+              issueId: prefill.issueId,
               teamId: prefill.teamId,
               supportingProposalId: prefill.supportingProposalId,
               artifactLinks: [],

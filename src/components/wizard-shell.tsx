@@ -9,6 +9,13 @@ type WizardShellProps = {
   completedSteps: number;
   totalSteps: number;
   currentStepName?: string;
+  issueCard?: {
+    title: string;
+    body: string;
+    severity: number | null;
+    actionLabel: string;
+    onAction: () => void;
+  } | null;
   coachPanel?: {
     activeLabel?: string;
     rightNow: string;
@@ -63,6 +70,7 @@ export function WizardShell({
   completedSteps,
   totalSteps,
   currentStepName,
+  issueCard,
   coachPanel,
   rail,
   children,
@@ -116,6 +124,34 @@ export function WizardShell({
             />
           </div>
         </div>
+
+        {issueCard ? (
+          <section className="mt-5 rounded-[24px] border border-line bg-white/75 p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">
+                    Main issue
+                  </p>
+                  {issueCard.severity ? (
+                    <span className="rounded-full border border-accent/20 bg-accent/8 px-2.5 py-0.5 text-[11px] font-medium text-accent">
+                      Severity {issueCard.severity}
+                    </span>
+                  ) : null}
+                </div>
+                <p className="mt-3 font-medium text-ink">{issueCard.title}</p>
+                <p className="mt-2 text-sm leading-6 text-ink/68">{issueCard.body}</p>
+              </div>
+              <button
+                type="button"
+                onClick={issueCard.onAction}
+                className="rounded-full border border-line bg-white px-4 py-2 text-sm font-medium text-ink"
+              >
+                {issueCard.actionLabel}
+              </button>
+            </div>
+          </section>
+        ) : null}
 
         {coachPanel ? (
           <div className="mt-5 grid gap-4 lg:grid-cols-[1.08fr_0.92fr]">

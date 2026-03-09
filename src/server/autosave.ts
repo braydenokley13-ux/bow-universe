@@ -2,6 +2,7 @@ import { ProjectType, ProposalStatus, PublicationType, SubmissionStatus } from "
 import { Prisma } from "@prisma/client";
 
 import { getPrimaryLaneTag, projectTypeToPublicationType } from "@/lib/publications";
+import { buildProjectIssueLinkCreates, resolveProjectPrimaryIssueId } from "@/lib/project-issues";
 import { prisma } from "@/lib/prisma";
 import type { LaneTag, ReferenceEntry } from "@/lib/types";
 import { parseJsonText, parseStringList } from "@/lib/utils";
@@ -122,7 +123,10 @@ export async function autosaveProjectDraft(params: {
   const laneTags = Array.from(new Set(params.formData.getAll("laneTags").map(String).filter(Boolean)));
   const lanePrimary = parseLanePrimary(String(params.formData.get("lanePrimary") ?? ""), projectType, laneTags);
   const finalLaneTags = Array.from(new Set([...laneTags, lanePrimary]));
-  const issueIds = params.formData.getAll("issueIds").map(String).filter(Boolean);
+  const issueId = resolveProjectPrimaryIssueId({
+    issueId: String(params.formData.get("issueId") ?? ""),
+    issueIds: params.formData.getAll("issueIds").map(String).filter(Boolean)
+  });
   const collaboratorIds = params.formData.getAll("collaboratorIds").map(String).filter(Boolean);
   const title = String(params.formData.get("title") ?? "").trim() || existing?.title || "Untitled project draft";
   const summary = String(params.formData.get("summary") ?? "").trim() || existing?.summary || "Draft summary in progress.";
@@ -157,7 +161,7 @@ export async function autosaveProjectDraft(params: {
           publicationType,
           lanePrimary,
           laneTagsJson: asJson(finalLaneTags),
-          issueId: issueIds[0] ?? null,
+          issueId: issueId || null,
           teamId: String(params.formData.get("teamId") ?? "").trim() || null,
           supportingProposalId: String(params.formData.get("supportingProposalId") ?? "").trim() || null,
           artifactLinksJson: asJson(artifactLinks),
@@ -170,7 +174,7 @@ export async function autosaveProjectDraft(params: {
           publicationSlug: String(params.formData.get("publicationSlug") ?? "").trim() || existing.publicationSlug,
           issueLinks: {
             deleteMany: {},
-            create: issueIds.map((issueId) => ({ issueId }))
+            create: buildProjectIssueLinkCreates(issueId)
           },
           collaborators: {
             deleteMany: {},
@@ -190,7 +194,7 @@ export async function autosaveProjectDraft(params: {
           publicationType,
           lanePrimary,
           laneTagsJson: asJson(finalLaneTags),
-          issueId: issueIds[0] ?? null,
+          issueId: issueId || null,
           teamId: String(params.formData.get("teamId") ?? "").trim() || null,
           supportingProposalId: String(params.formData.get("supportingProposalId") ?? "").trim() || null,
           artifactLinksJson: asJson(artifactLinks),
@@ -203,7 +207,7 @@ export async function autosaveProjectDraft(params: {
           publicationSlug: String(params.formData.get("publicationSlug") ?? "").trim() || null,
           createdByUserId: params.actorUserId,
           issueLinks: {
-            create: issueIds.map((issueId) => ({ issueId }))
+            create: buildProjectIssueLinkCreates(issueId)
           },
           collaborators: {
             create: collaboratorIds.map((userId) => ({ userId }))

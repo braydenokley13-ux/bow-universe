@@ -33,7 +33,7 @@ export type RecommendedMission = {
 };
 
 export type ProjectRepairFieldId =
-  | "issueIds"
+  | "issueId"
   | "lanePrimary"
   | "title"
   | "summary"
@@ -264,7 +264,7 @@ export function getProjectRepairTarget(sectionKey: string): {
   }
 
   if (normalized.includes("issue")) {
-    return { fieldId: "issueIds", label: "issue choice" };
+    return { fieldId: "issueId", label: "issue choice" };
   }
 
   if (normalized.includes("title")) {

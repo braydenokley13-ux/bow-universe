@@ -61,7 +61,8 @@ import { getProjectRepairTarget, getProjectTypeForLane } from "@/lib/student-flo
 type ProjectStudioFormProps = {
   action: (formData: FormData) => void | Promise<void>;
   viewerId: string;
-  issues: Array<{ id: string; title: string; severity: number }>;
+  viewerRole: "STUDENT" | "ADMIN";
+  issues: Array<{ id: string; title: string; description: string; severity: number }>;
   teams: Array<{ id: string; name: string }>;
   users: Array<{ id: string; name: string }>;
   proposals: Array<{ id: string; title: string; issue: { title: string } }>;
@@ -75,7 +76,7 @@ type ProjectStudioFormProps = {
     projectType: ProjectType;
     lanePrimary: LaneTag;
     laneTags: LaneTag[];
-    issueIds: string[];
+    issueId: string;
     teamId: string;
     supportingProposalId: string;
     artifactLinks: ArtifactLink[];
@@ -142,9 +143,7 @@ function buildProjectFormData(values: ProjectCoachValues, draftId: string) {
     formData.append("laneTags", laneTag);
   }
 
-  for (const issueId of values.issueIds) {
-    formData.append("issueIds", issueId);
-  }
+  formData.set("issueId", values.issueId);
 
   for (const collaboratorId of values.collaboratorIds) {
     formData.append("collaboratorIds", collaboratorId);
@@ -222,6 +221,7 @@ function replaceStepUrl(pathname: string, searchParams: string, stepId: string) 
 export function ProjectStudioForm({
   action,
   viewerId,
+  viewerRole,
   issues,
   teams,
   users,
@@ -263,7 +263,7 @@ export function ProjectStudioForm({
         initial?.laneTags && initial.laneTags.length > 0
           ? uniqueLaneTags(initial.laneTags, defaultLane)
           : [defaultLane],
-      issueIds: initial?.issueIds ?? [],
+      issueId: initial?.issueId ?? "",
       teamId: initial?.teamId ?? "",
       supportingProposalId: initial?.supportingProposalId ?? "",
       collaboratorIds: initial?.collaboratorIds ?? [],
@@ -297,8 +297,8 @@ export function ProjectStudioForm({
     abstract: Boolean(initial?.abstract),
     methodsSummary: Boolean(initial?.methodsSummary)
   });
-
-  const selectedIssue = issues.find((issue) => issue.id === values.issueIds[0]) ?? null;
+  const issueRequired = viewerRole === "STUDENT";
+  const selectedIssue = issues.find((issue) => issue.id === values.issueId) ?? null;
   const effectiveValues = useMemo(() => {
     if (!beginnerMode) {
       return values;
@@ -322,9 +322,13 @@ export function ProjectStudioForm({
       findingsMd: derivedBeginnerFields.findingsMd
     };
   }, [beginnerMode, manualDerivedFields, selectedIssue?.title, values]);
-  const steps = getProjectCoachSteps(effectiveValues.lanePrimary);
+  const steps = getProjectCoachSteps(effectiveValues.lanePrimary, {
+    issueRequired
+  });
   const laneTemplate = getLaneTemplate(effectiveValues.lanePrimary);
-  const assessment = assessProjectCoach(effectiveValues);
+  const assessment = assessProjectCoach(effectiveValues, {
+    issueRequired
+  });
   const repairTarget =
     repairQuery?.trim().length
       ? getProjectRepairTarget(repairQuery)
@@ -360,7 +364,7 @@ export function ProjectStudioForm({
     isBeginnerStepComplete(stepId, effectiveValues)
   ).length;
   const beginnerSubmitReady =
-    effectiveValues.issueIds.length > 0 &&
+    effectiveValues.issueId.trim().length > 0 &&
     effectiveValues.essentialQuestion.trim().length >= 8 &&
     effectiveValues.context.trim().length >= 16 &&
     effectiveValues.evidence.trim().length >= 16 &&
@@ -628,16 +632,18 @@ export function ProjectStudioForm({
     });
   }
 
-  function toggleArrayValue<K extends "issueIds" | "collaboratorIds">(fieldId: K, value: string) {
+  function changeIssue(issueId: string) {
+    setValues((current) => ({
+      ...current,
+      issueId
+    }));
+  }
+
+  function toggleArrayValue(fieldId: "collaboratorIds", value: string) {
     setValues((current) => {
-      const nextValues =
-        beginnerMode && fieldId === "issueIds"
-          ? current[fieldId].includes(value)
-            ? current[fieldId]
-            : [value]
-          : current[fieldId].includes(value)
-            ? current[fieldId].filter((entry) => entry !== value)
-            : [...current[fieldId], value];
+      const nextValues = current[fieldId].includes(value)
+        ? current[fieldId].filter((entry) => entry !== value)
+        : [...current[fieldId], value];
 
       return {
         ...current,
@@ -703,6 +709,21 @@ export function ProjectStudioForm({
     setCurrentStepId(stepId);
   }
 
+  function jumpToIssueStep() {
+    setCarryForwardWarnings([]);
+
+    if (beginnerMode) {
+      setCurrentBeginnerStepId("issue");
+    } else {
+      setCurrentStepId("context");
+    }
+
+    window.setTimeout(() => {
+      const element = document.getElementById(getProjectCoachDomId("issueId"));
+      element?.focus();
+    }, 30);
+  }
+
   function renderHiddenFields() {
     return (
       <>
@@ -739,9 +760,7 @@ export function ProjectStudioForm({
         {effectiveValues.laneTags.map((laneTag) => (
           <input key={`lane-tag-${laneTag}`} type="hidden" name="laneTags" value={laneTag} readOnly />
         ))}
-        {effectiveValues.issueIds.map((issueId) => (
-          <input key={`issue-${issueId}`} type="hidden" name="issueIds" value={issueId} readOnly />
-        ))}
+        <input type="hidden" name="issueId" value={effectiveValues.issueId} readOnly />
         {effectiveValues.collaboratorIds.map((collaboratorId) => (
           <input
             key={`collaborator-${collaboratorId}`}
@@ -798,7 +817,7 @@ export function ProjectStudioForm({
             step={currentStep}
             evaluation={currentStepEvaluation}
             warningItems={carryForwardWarnings}
-            issueEvaluation={assessment.fields.issueIds}
+            issueEvaluation={assessment.fields.issueId}
             teamEvaluation={assessment.fields.teamId}
             proposalEvaluation={assessment.fields.supportingProposalId}
             collaboratorEvaluation={assessment.fields.collaboratorIds}
@@ -807,11 +826,11 @@ export function ProjectStudioForm({
             proposals={proposals}
             users={users}
             viewerId={viewerId}
-            issueIds={values.issueIds}
+            issueId={values.issueId}
             teamId={values.teamId}
             supportingProposalId={values.supportingProposalId}
             collaboratorIds={values.collaboratorIds}
-            onToggleIssue={(value) => toggleArrayValue("issueIds", value)}
+            onChangeIssue={changeIssue}
             onChangeTeam={(value) => updateField("teamId", value)}
             onChangeSupportingProposal={(value) => updateField("supportingProposalId", value)}
             onToggleCollaborator={(value) => toggleArrayValue("collaboratorIds", value)}
@@ -1184,13 +1203,18 @@ export function ProjectStudioForm({
             </p>
 
             <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {issues.slice(0, 6).map((issue) => {
-                const selected = effectiveValues.issueIds[0] === issue.id;
+              {issues.map((issue) => {
+                const selected = effectiveValues.issueId === issue.id;
                 return (
                   <button
                     key={issue.id}
+                    id={
+                      selected || (!effectiveValues.issueId && issues[0]?.id === issue.id)
+                        ? getProjectCoachDomId("issueId")
+                        : undefined
+                    }
                     type="button"
-                    onClick={() => toggleArrayValue("issueIds", issue.id)}
+                    onClick={() => changeIssue(issue.id)}
                     className={`rounded-[24px] border p-5 text-left transition ${
                       selected
                         ? "border-accent bg-accent/8 shadow-panel"
@@ -1209,7 +1233,7 @@ export function ProjectStudioForm({
                     </div>
                     <p className="mt-3 text-base font-semibold text-ink">{issue.title}</p>
                     <p className="mt-3 text-sm leading-6 text-ink/62">
-                      Choose the issue that feels clear enough to explain to someone else.
+                      {issue.description.trim() || "Choose the issue that feels clear enough to explain to someone else."}
                     </p>
                   </button>
                 );
@@ -1423,7 +1447,7 @@ export function ProjectStudioForm({
                 <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Checklist</p>
                 <ul className="mt-3 space-y-2 text-sm leading-6 text-ink/68">
                   <li className="rounded-2xl border border-line bg-mist/40 px-3 py-2">
-                    {effectiveValues.issueIds.length > 0 ? "Issue picked." : "Pick one issue."}
+                    {selectedIssue ? `Issue: ${selectedIssue.title}.` : "Pick one issue."}
                   </li>
                   <li className="rounded-2xl border border-line bg-mist/40 px-3 py-2">
                     {effectiveValues.essentialQuestion.trim() ? "Big question written." : "Write the big question."}
@@ -1557,6 +1581,28 @@ export function ProjectStudioForm({
   })();
   const reviewMode = beginnerMode ? currentBeginnerStepId === "review" : currentStepId === "review";
   const submitReady = beginnerMode ? beginnerSubmitReady : assessment.submitReady;
+  const issueReminder = selectedIssue
+    ? `Main issue: ${selectedIssue.title}.`
+    : issueRequired
+      ? "Pick one issue so the project stays tied to a real league problem."
+      : "You can add one main issue if it helps place the project.";
+  const issueCard = selectedIssue
+    ? {
+        title: selectedIssue.title,
+        body: selectedIssue.description.trim() || "This is the main issue the project is solving around.",
+        severity: selectedIssue.severity,
+        actionLabel: beginnerMode ? "Change issue" : "Edit issue choice",
+        onAction: jumpToIssueStep
+      }
+    : issueRequired
+      ? {
+          title: "No issue chosen yet",
+          body: "Pick one issue and keep it visible so each answer stays connected to the same problem.",
+          severity: null,
+          actionLabel: "Choose issue",
+          onAction: jumpToIssueStep
+        }
+      : null;
 
   return (
     <form
@@ -1574,12 +1620,13 @@ export function ProjectStudioForm({
         <WizardShell
           progressTitle="First project guide"
           documentTitle={effectiveValues.title || "Untitled project"}
-          progressDescription={`This version keeps the work small and clear. You answer one question at a time, and the studio builds the formal project fields for you in ${laneTagLabels[effectiveValues.lanePrimary]}.`}
+          progressDescription={`This version keeps the work small and clear. You answer one question at a time, and the studio builds the formal project fields for you in ${laneTagLabels[effectiveValues.lanePrimary]}. ${issueReminder}`}
           autosaveMessage={autosaveState.message}
           autosaveTone={autosaveState.tone}
           completedSteps={completedBeginnerSteps}
           totalSteps={beginnerProjectStepOrder.length}
           currentStepName={beginnerCurrentContent.shortTitle}
+          issueCard={issueCard}
           coachPanel={{
             activeLabel: beginnerCurrentContent.title,
             rightNow: beginnerCurrentContent.rightNow,
@@ -1617,12 +1664,13 @@ export function ProjectStudioForm({
         <WizardShell
           progressTitle="Project coach"
           documentTitle={values.title || "Untitled project"}
-          progressDescription={`Lane: ${laneTagLabels[values.lanePrimary]}. Complete each section, then submit for review.`}
+          progressDescription={`Lane: ${laneTagLabels[values.lanePrimary]}. Complete each section, then submit for review. ${issueReminder}`}
           autosaveMessage={autosaveState.message}
           autosaveTone={autosaveState.tone}
           completedSteps={completedSteps}
           totalSteps={projectCoachStepOrder.length}
           currentStepName={currentStep.shortTitle}
+          issueCard={issueCard}
           coachPanel={{
             activeLabel: currentStep.title,
             rightNow: currentStep.rightNow,

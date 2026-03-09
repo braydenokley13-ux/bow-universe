@@ -27,7 +27,7 @@ export type ProjectCoachFieldId =
   | "lanePrimary"
   | "projectType"
   | "laneTags"
-  | "issueIds"
+  | "issueId"
   | "teamId"
   | "supportingProposalId"
   | "collaboratorIds"
@@ -54,7 +54,7 @@ export type ProjectCoachValues = {
   lanePrimary: LaneTag;
   projectType: ProjectType;
   laneTags: LaneTag[];
-  issueIds: string[];
+  issueId: string;
   teamId: string;
   supportingProposalId: string;
   collaboratorIds: string[];
@@ -154,6 +154,10 @@ export type ProjectCoachAssessment = {
   };
 };
 
+export type ProjectCoachAssessmentOptions = {
+  issueRequired?: boolean;
+};
+
 type FieldConfig = {
   id: ProjectCoachFieldId;
   label: string;
@@ -234,19 +238,19 @@ const fieldConfigs: Record<ProjectCoachFieldId, FieldConfig> = {
     weakExample: "Check every lane.",
     strongExample: "Keep the primary lane and add only one extra lane if the work genuinely overlaps."
   },
-  issueIds: {
-    id: "issueIds",
-    label: "Linked issues",
+  issueId: {
+    id: "issueId",
+    label: "Primary issue",
     stepId: "context",
     required: false,
     recipe: [
-      "Link the project to a live issue if it speaks to one.",
-      "Choose the issue that best explains why this project matters.",
-      "Leave it empty only if the project is not anchored to a specific issue yet."
+      "Pick the one league issue this project is mainly trying to help.",
+      "Keep one issue visible so the project does not drift into a vague school assignment.",
+      "Leave it empty only when the project truly stands alone."
     ],
     starters: [],
-    weakExample: "No project context at all.",
-    strongExample: "Link the project to the issue that the research or tool is designed to help."
+    weakExample: "A project with no clear issue anchor.",
+    strongExample: "Choose the one issue that best explains why this project matters right now."
   },
   teamId: {
     id: "teamId",
@@ -592,7 +596,7 @@ export function createInitialProjectCoachValues(initial?: Partial<ProjectCoachVa
     lanePrimary: initial?.lanePrimary ?? "ECONOMIC_INVESTIGATORS",
     projectType: initial?.projectType ?? ProjectType.INVESTIGATION,
     laneTags: initial?.laneTags ?? [initial?.lanePrimary ?? "ECONOMIC_INVESTIGATORS"],
-    issueIds: initial?.issueIds ?? [],
+    issueId: initial?.issueId ?? "",
     teamId: initial?.teamId ?? "",
     supportingProposalId: initial?.supportingProposalId ?? "",
     collaboratorIds: initial?.collaboratorIds ?? [],
@@ -681,8 +685,12 @@ export function isProjectCoachStepId(value: string | null | undefined): value is
   return value ? projectCoachStepOrder.includes(value as ProjectCoachStepId) : false;
 }
 
-export function getProjectCoachSteps(lane: LaneTag): Record<ProjectCoachStepId, ProjectCoachStepDefinition> {
+export function getProjectCoachSteps(
+  lane: LaneTag,
+  options?: ProjectCoachAssessmentOptions
+): Record<ProjectCoachStepId, ProjectCoachStepDefinition> {
   const template = getLaneTemplate(lane);
+  const issueRequired = options?.issueRequired ?? false;
 
   return {
     lane: {
@@ -702,18 +710,18 @@ export function getProjectCoachSteps(lane: LaneTag): Record<ProjectCoachStepId, 
       id: "context",
       shortTitle: "Context",
       title: "Anchor the work in the league",
-      fieldIds: ["issueIds", "teamId", "supportingProposalId", "collaboratorIds"],
-      requiredFieldIds: [],
-      rightNow: "Link the project to the issue, team, proposal, or collaborators that explain why it matters.",
-      whyItMatters: "Context helps a new reader place the work inside the BOW Universe instead of treating it like a floating school assignment.",
+      fieldIds: ["issueId", "teamId", "supportingProposalId", "collaboratorIds"],
+      requiredFieldIds: issueRequired ? ["issueId"] : [],
+      rightNow: "Choose the main issue first, then add any team, proposal, or collaborator details that help the reader place the work.",
+      whyItMatters: "A clear issue anchor keeps the project tied to a real league problem instead of drifting into a generic classroom topic.",
       recipe: [
-        "Link at least one real part of the league if the project belongs somewhere.",
-        "Use context fields to orient the reader, not just to fill boxes.",
-        "Leave fields empty only when the project truly stands alone."
+        "Choose the one issue that the work is mainly responding to.",
+        "Use the other context fields only when they genuinely help explain the work.",
+        "Leave extra fields empty instead of adding noise."
       ],
       starters: [],
-      weakExample: "No context at all, even though the project clearly responds to a live issue.",
-      strongExample: "The project is linked to the issue or team it is actually trying to help."
+      weakExample: "The project talks about league pressure, but the main issue is still fuzzy.",
+      strongExample: "The project clearly names the one issue it is trying to help and only adds extra context that matters."
     },
     opening: {
       id: "opening",
@@ -820,8 +828,12 @@ export function getProjectCoachSteps(lane: LaneTag): Record<ProjectCoachStepId, 
   };
 }
 
-export function assessProjectCoach(values: ProjectCoachValues): ProjectCoachAssessment {
-  const steps = getProjectCoachSteps(values.lanePrimary);
+export function assessProjectCoach(
+  values: ProjectCoachValues,
+  options?: ProjectCoachAssessmentOptions
+): ProjectCoachAssessment {
+  const issueRequired = options?.issueRequired ?? false;
+  const steps = getProjectCoachSteps(values.lanePrimary, options);
   const laneTemplate = getLaneTemplate(values.lanePrimary);
   const laneSectionEvaluations = values.laneSections.map((section) =>
     evaluateLaneSection(section, laneTemplate.outputLabel)
@@ -831,7 +843,7 @@ export function assessProjectCoach(values: ProjectCoachValues): ProjectCoachAsse
     lanePrimary: evaluateLanePrimary(values.lanePrimary),
     projectType: evaluateProjectType(values.projectType),
     laneTags: evaluateLaneTags(values.laneTags, values.lanePrimary),
-    issueIds: evaluateIssueLinks(values.issueIds),
+    issueId: evaluateIssueLink(values.issueId, issueRequired),
     teamId: evaluateTeamLink(values.teamId),
     supportingProposalId: evaluateSupportingProposal(values.supportingProposalId),
     collaboratorIds: evaluateCollaborators(values.collaboratorIds),
@@ -893,14 +905,16 @@ export function assessProjectCoach(values: ProjectCoachValues): ProjectCoachAsse
     };
   }
 
-  stepEvaluations.context = {
-    ...stepEvaluations.context,
-    complete: true,
-    nextMove:
-      fields.issueIds.state !== "empty"
-        ? "Good. The project has useful league context."
-        : "Optional: add an issue, team, or proposal link if it helps readers place the work."
-  };
+  if (!issueRequired) {
+    stepEvaluations.context = {
+      ...stepEvaluations.context,
+      complete: true,
+      nextMove:
+        fields.issueId.state !== "empty"
+          ? "Good. The project has useful league context."
+          : "Optional: add an issue, team, or proposal link if it helps readers place the work."
+    };
+  }
 
   stepEvaluations.publish = {
     ...stepEvaluations.publish,
@@ -985,7 +999,7 @@ function stepHasAnyContent(
     case "lane":
       return Boolean(values.lanePrimary) || values.laneTags.length > 0;
     case "context":
-      return Boolean(values.teamId || values.supportingProposalId || values.issueIds.length || values.collaboratorIds.length);
+      return Boolean(values.teamId || values.supportingProposalId || values.issueId || values.collaboratorIds.length);
     case "opening":
       return Boolean(values.title || values.summary || values.abstract);
     case "mission":
@@ -1056,15 +1070,28 @@ function evaluateLaneTags(values: LaneTag[], lanePrimary: LaneTag) {
   };
 }
 
-function evaluateIssueLinks(values: string[]) {
-  const base = baseFieldEvaluation(fieldConfigs.issueIds);
-  if (values.length === 0) {
-    return optionalEmptyEvaluation(base, "Optional: link an issue if the project responds to a live league problem.");
+function evaluateIssueLink(value: string, required: boolean) {
+  const base = baseFieldEvaluation(fieldConfigs.issueId, required);
+
+  if (!value.trim()) {
+    if (required) {
+      return requiredEmptyEvaluation(
+        base,
+        "Pick one main issue so the project stays tied to a real league problem.",
+        [
+          "Choose the one issue this project is mainly trying to help."
+        ]
+      );
+    }
+
+    return optionalEmptyEvaluation(base, "Optional: link one issue if the project responds to a live league problem.");
   }
-  if (values.length === 1) {
-    return optionalReadyEvaluation(base, "Good. The project is anchored to a live issue.");
+
+  if (required) {
+    return requiredReadyEvaluation(base, "Good. The project is anchored to one clear issue.", "Next, add any extra context that genuinely helps the reader.");
   }
-  return optionalStrongEvaluation(base, "Good. The project is linked to more than one useful issue context.");
+
+  return optionalReadyEvaluation(base, "Good. The project is anchored to one clear issue.");
 }
 
 function evaluateTeamLink(value: string) {
@@ -1503,12 +1530,12 @@ function evaluateFindings(value: string) {
   return optionalReadyEvaluation(base, "Good. You added a custom markdown summary for the final body.");
 }
 
-function baseFieldEvaluation(config: FieldConfig) {
+function baseFieldEvaluation(config: FieldConfig, required = config.required) {
   return {
     fieldId: config.id,
     label: config.label,
     stepId: config.stepId,
-    required: config.required,
+    required,
     recipe: config.recipe,
     starters: config.starters,
     missingIngredients: [] as string[],

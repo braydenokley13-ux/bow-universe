@@ -47,16 +47,16 @@ type ProjectStepContextProps = StepCommonProps & {
   teamEvaluation: ProjectCoachFieldEvaluation;
   proposalEvaluation: ProjectCoachFieldEvaluation;
   collaboratorEvaluation: ProjectCoachFieldEvaluation;
-  issues: Array<{ id: string; title: string; severity: number }>;
+  issues: Array<{ id: string; title: string; description: string; severity: number }>;
   teams: Array<{ id: string; name: string }>;
   proposals: Array<{ id: string; title: string; issue: { title: string } }>;
   users: Array<{ id: string; name: string }>;
   viewerId: string;
-  issueIds: string[];
+  issueId: string;
   teamId: string;
   supportingProposalId: string;
   collaboratorIds: string[];
-  onToggleIssue: (value: string) => void;
+  onChangeIssue: (value: string) => void;
   onChangeTeam: (value: string) => void;
   onChangeSupportingProposal: (value: string) => void;
   onToggleCollaborator: (value: string) => void;
@@ -281,34 +281,51 @@ export function ProjectStepContext({
   proposals,
   users,
   viewerId,
-  issueIds,
+  issueId,
   teamId,
   supportingProposalId,
   collaboratorIds,
-  onToggleIssue,
+  onChangeIssue,
   onChangeTeam,
   onChangeSupportingProposal,
   onToggleCollaborator
 }: ProjectStepContextProps) {
+  const selectedIssue = issues.find((issue) => issue.id === issueId) ?? null;
+
   return (
     <ProjectStepLayout step={step} evaluation={evaluation} warningItems={warningItems}>
       <ProjectFieldBlock
-        label="Issue links"
-        detail="Link the project to the live issue or issues it helps explain."
+        label="Primary issue"
+        detail="Choose the one live issue this project is mainly trying to help."
         coach={<FieldCoach evaluation={issueEvaluation} />}
       >
-        <div className="max-h-64 space-y-2 overflow-auto">
+        <select
+          id="project-field-issueId"
+          value={issueId}
+          onChange={(event) => onChangeIssue(event.target.value)}
+          className="w-full rounded-2xl border border-line bg-white/90 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
+        >
+          <option value="">No linked issue</option>
           {issues.map((issue) => (
-            <label key={issue.id} className="flex items-center gap-2 text-sm text-ink/72">
-              <input
-                type="checkbox"
-                checked={issueIds.includes(issue.id)}
-                onChange={() => onToggleIssue(issue.id)}
-                className="rounded"
-              />
-              {issue.title} (severity {issue.severity})
-            </label>
+            <option key={issue.id} value={issue.id}>
+              {issue.title} · severity {issue.severity}
+            </option>
           ))}
+        </select>
+
+        <div className="mt-4 rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm leading-6 text-ink/70">
+          {selectedIssue ? (
+            <>
+              <span className="block font-medium text-ink">
+                {selectedIssue.title} · severity {selectedIssue.severity}
+              </span>
+              <span className="mt-2 block">
+                {selectedIssue.description.trim() || "This is the issue the project will stay anchored to while you write."}
+              </span>
+            </>
+          ) : (
+            "Choose one issue so the rest of the wizard keeps pointing at the same problem."
+          )}
         </div>
       </ProjectFieldBlock>
 

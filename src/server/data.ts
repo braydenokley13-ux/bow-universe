@@ -584,7 +584,7 @@ export async function getAdminPublicationsData() {
 }
 
 export async function getProjectStudioData(projectId?: string) {
-  const [issues, teams, users, proposals, project] = await Promise.all([
+  const [issueRecords, teams, users, proposals, project] = await Promise.all([
     prisma.issue.findMany({
       where: { status: { in: [IssueStatus.OPEN, IssueStatus.IN_REVIEW] } },
       orderBy: [{ severity: "desc" }, { title: "asc" }]
@@ -615,7 +615,12 @@ export async function getProjectStudioData(projectId?: string) {
       ? prisma.project.findUnique({
           where: { id: projectId },
           include: {
-            issueLinks: true,
+            primaryIssue: true,
+            issueLinks: {
+              include: {
+                issue: true
+              }
+            },
             collaborators: true,
             feedbackEntries: {
               include: {
@@ -633,6 +638,18 @@ export async function getProjectStudioData(projectId?: string) {
         })
       : null
   ]);
+
+  const issues = [...issueRecords];
+
+  if (project?.primaryIssue && !issues.some((issue) => issue.id === project.primaryIssue?.id)) {
+    issues.unshift(project.primaryIssue);
+  }
+
+  for (const link of project?.issueLinks ?? []) {
+    if (!issues.some((issue) => issue.id === link.issue.id)) {
+      issues.push(link.issue);
+    }
+  }
 
   return {
     issues,
