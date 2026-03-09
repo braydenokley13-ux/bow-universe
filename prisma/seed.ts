@@ -1,5 +1,6 @@
 import { hash } from "bcryptjs";
 import {
+  GradeBand,
   Prisma,
   ProjectType,
   ProposalStatus,
@@ -30,6 +31,7 @@ import { prisma } from "../src/lib/prisma";
 import type { ReferenceEntry } from "../src/lib/types";
 import { slugify } from "../src/lib/utils";
 import { syncProjectPublication, syncProposalPublication } from "../src/server/publications";
+import { seedGlossaryTerms } from "./seed-glossary";
 
 const defaultPassword = "bowuniverse";
 
@@ -116,6 +118,26 @@ function proposalSeedStatus(status: ProposalStatus) {
   return status;
 }
 
+function gradeBandForStudent(name: string) {
+  const analystMatch = name.match(/^Student Analyst (\d+)$/);
+
+  if (analystMatch) {
+    return Number(analystMatch[1]) <= 9 ? GradeBand.GRADE_5_6 : GradeBand.GRADE_7_8;
+  }
+
+  return GradeBand.GRADE_7_8;
+}
+
+function studentCompletedOnboarding(name: string) {
+  const analystMatch = name.match(/^Student Analyst (\d+)$/);
+
+  if (!analystMatch) {
+    return true;
+  }
+
+  return Number(analystMatch[1]) <= 12;
+}
+
 async function main() {
   const passwordHash = await hash(defaultPassword, 10);
   const names = uniqueNames();
@@ -127,6 +149,16 @@ async function main() {
   await prisma.projectFeedback.deleteMany();
   await prisma.proposalRevision.deleteMany();
   await prisma.projectRevision.deleteMany();
+  await prisma.challengeScoreEvent.deleteMany();
+  await prisma.challengeEntry.deleteMany();
+  await prisma.challenge.deleteMany();
+  await prisma.newsPost.deleteMany();
+  await prisma.studentInvite.deleteMany();
+  await prisma.classCode.deleteMany();
+  await prisma.cohortMilestone.deleteMany();
+  await prisma.cohortMember.deleteMany();
+  await prisma.cohort.deleteMany();
+  await prisma.glossaryTerm.deleteMany();
   await prisma.activityEvent.deleteMany();
   await prisma.projectComment.deleteMany();
   await prisma.projectCollaborator.deleteMany();
@@ -156,11 +188,22 @@ async function main() {
             ? "commissioner@bow.local"
             : `${slugify(name)}@bow.local`,
         passwordHash,
-        role
+        role,
+        gradeBand: role === UserRole.STUDENT ? gradeBandForStudent(name) : undefined,
+        onboardingCompletedAt:
+          role === UserRole.STUDENT && studentCompletedOnboarding(name)
+            ? new Date("2028-10-18T12:00:00Z")
+            : null
       }
     });
     userMap.set(name, user.id);
   }
+
+  const commissionerId = userMap.get("Commissioner Avery")!;
+  await prisma.user.updateMany({
+    where: { role: UserRole.STUDENT },
+    data: { commissionerId }
+  });
 
   const ruleSetIds = new Map<string, string>();
   for (const ruleSet of [...ruleSets].sort((a, b) => a.version - b.version)) {
@@ -524,6 +567,145 @@ async function main() {
     }
   });
 
+  const foundationsCohort = await prisma.cohort.create({
+    data: {
+      name: "Period 5 · Foundations",
+      description: "Grades 5-6 class launch with a guided first project and short milestone check-ins.",
+      createdByUserId: commissionerId
+    }
+  });
+
+  const studioCohort = await prisma.cohort.create({
+    data: {
+      name: "Period 7 · Studio",
+      description: "Grades 7-8 class with broader memo and publication workflow after the first project.",
+      createdByUserId: commissionerId
+    }
+  });
+
+  await prisma.cohortMilestone.createMany({
+    data: [
+      {
+        cohortId: foundationsCohort.id,
+        label: "First project started",
+        targetDate: new Date("2028-10-21T14:00:00Z"),
+        description: "Students choose a mission and begin the guided beginner project."
+      },
+      {
+        cohortId: foundationsCohort.id,
+        label: "First project submitted",
+        targetDate: new Date("2028-10-28T14:00:00Z"),
+        description: "Students finish the first classroom-ready submission."
+      },
+      {
+        cohortId: studioCohort.id,
+        label: "Memo pathway unlocked",
+        targetDate: new Date("2028-10-24T14:00:00Z"),
+        description: "Students who finished project one can move into proposal or challenge work."
+      },
+      {
+        cohortId: studioCohort.id,
+        label: "Publishing checkpoint",
+        targetDate: new Date("2028-11-05T14:00:00Z"),
+        description: "Students review polished work and prepare selected pieces for publication."
+      }
+    ]
+  });
+
+  const foundationsMemberNames = [
+    "Student Analyst 1",
+    "Student Analyst 2",
+    "Student Analyst 3",
+    "Student Analyst 4",
+    "Student Analyst 5",
+    "Student Analyst 6"
+  ];
+  const studioMemberNames = [
+    "Student Analyst 7",
+    "Student Analyst 8",
+    "Student Analyst 9",
+    "Student Analyst 10",
+    "Student Analyst 11",
+    "Student Analyst 12"
+  ];
+
+  for (const name of foundationsMemberNames) {
+    await prisma.cohortMember.create({
+      data: {
+        cohortId: foundationsCohort.id,
+        userId: userMap.get(name)!
+      }
+    });
+  }
+
+  for (const name of studioMemberNames) {
+    await prisma.cohortMember.create({
+      data: {
+        cohortId: studioCohort.id,
+        userId: userMap.get(name)!
+      }
+    });
+  }
+
+  const foundationsClassCode = await prisma.classCode.create({
+    data: {
+      code: "P5FOUND56",
+      label: "Period 5 guided launch",
+      description: "Use this code for the younger classroom track with the beginner project flow.",
+      commissionerId,
+      linkedTeamId: teamIds.get("glass-harbor-tides")!,
+      defaultGradeBand: GradeBand.GRADE_5_6,
+      cohortId: foundationsCohort.id,
+      expiresAt: new Date("2028-12-20T22:00:00Z")
+    }
+  });
+
+  const studioClassCode = await prisma.classCode.create({
+    data: {
+      code: "P7STUDIO78",
+      label: "Period 7 studio launch",
+      description: "Use this code for the older classroom track with the broader memo workflow.",
+      commissionerId,
+      linkedTeamId: teamIds.get("northwind-astrals")!,
+      defaultGradeBand: GradeBand.GRADE_7_8,
+      cohortId: studioCohort.id,
+      expiresAt: new Date("2028-12-20T22:00:00Z")
+    }
+  });
+
+  await prisma.classCode.create({
+    data: {
+      code: "TEACHERDEMO",
+      label: "Teacher planning demo",
+      description: "An extra code that shows the admin flow before a cohort is attached.",
+      commissionerId,
+      linkedTeamId: teamIds.get("cinder-vale-forge")!,
+      defaultGradeBand: GradeBand.GRADE_7_8
+    }
+  });
+
+  for (const name of foundationsMemberNames) {
+    await prisma.user.update({
+      where: { id: userMap.get(name)! },
+      data: {
+        signedUpViaClassCodeId: foundationsClassCode.id,
+        gradeBand: GradeBand.GRADE_5_6
+      }
+    });
+  }
+
+  for (const name of studioMemberNames) {
+    await prisma.user.update({
+      where: { id: userMap.get(name)! },
+      data: {
+        signedUpViaClassCodeId: studioClassCode.id,
+        gradeBand: GradeBand.GRADE_7_8
+      }
+    });
+  }
+
+  await seedGlossaryTerms();
+
   for (const event of activityFeed) {
     const entityType =
       event.type === "proposal"
@@ -560,6 +742,8 @@ async function main() {
   console.log("Seeded BOW Universe.");
   console.log(`Commissioner login: commissioner@bow.local / ${defaultPassword}`);
   console.log(`Student login: riya-patel@bow.local / ${defaultPassword}`);
+  console.log(`Class code: ${foundationsClassCode.code}`);
+  console.log(`Class code: ${studioClassCode.code}`);
 }
 
 main()

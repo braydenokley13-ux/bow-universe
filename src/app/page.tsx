@@ -37,21 +37,21 @@ export default async function HomePage() {
     return (
       <div className="space-y-8">
         <SectionHeading
-          eyebrow="League Dashboard"
-          title="BOW League Research Terminal"
-          description="A persistent fictional sports-economy league for grades 5 to 8. Sign in to start research, write proposals, and publish your work."
+          eyebrow="Classroom Home"
+          title="BOW League classroom workspace"
+          description="A sports-economy world for grades 5 to 8. Sign in to get your first mission, work through small steps, and turn class ideas into real league projects."
         />
 
         <section className="metric-grid">
-          <MetricCard label="Active Ruleset" value={`v${currentSeason?.activeRuleSet.version ?? "-"}`} detail="The baseline rule environment that current proposals are testing against." />
-          <MetricCard label="Season" value={String(currentSeason?.year ?? "-")} detail="The live season controls which team snapshots and rule context the app is reading." />
-          <MetricCard label="Parity Index" value={metrics.parityIndex.toFixed(1)} detail="A lower value means team strength is clustering more tightly across the league." />
-          <MetricCard label="Revenue Inequality" value={metrics.revenueInequality.toFixed(2)} detail="A higher value means the league still has a wider gap between top and bottom clubs." />
+          <MetricCard label="Rules version" value={`v${currentSeason?.activeRuleSet.version ?? "-"}`} detail="This is the current set of league money rules everyone is studying." />
+          <MetricCard label="Season" value={String(currentSeason?.year ?? "-")} detail="The season tells you which team data and money rules are active right now." />
+          <MetricCard label="How even teams are" value={metrics.parityIndex.toFixed(1)} detail="Lower numbers mean teams are closer together instead of one team running away from everyone." />
+          <MetricCard label="Money gap" value={metrics.revenueInequality.toFixed(2)} detail="Higher numbers mean the richest and poorest teams are farther apart." />
         </section>
 
         <div className="panel p-8 text-center">
-          <p className="font-display text-2xl text-ink">Sign in to start researching</p>
-          <p className="mt-3 text-sm leading-6 text-ink/70">Pick a research lane, work through the league&apos;s problems, and publish your findings.</p>
+          <p className="font-display text-2xl text-ink">Sign in to start your first mission</p>
+          <p className="mt-3 text-sm leading-6 text-ink/70">You will choose one issue, answer small questions, and build your first project step by step.</p>
           <Link href="/login" className="mt-6 inline-block rounded-full border border-accent bg-accent px-6 py-3 font-medium text-white">Sign in</Link>
         </div>
       </div>
@@ -64,6 +64,7 @@ export default async function HomePage() {
         where: { id: viewer.id },
         select: {
           onboardingCompletedAt: true,
+          gradeBand: true,
           linkedTeam: {
             select: {
               id: true,
@@ -87,6 +88,7 @@ export default async function HomePage() {
           missions={missionControl.missionCandidates}
           markOnboardingComplete
           linkedTeamName={userRecord?.linkedTeam?.name ?? null}
+          gradeBand={userRecord?.gradeBand ?? null}
         />
       );
     }
@@ -95,6 +97,7 @@ export default async function HomePage() {
       <StudentDashboard
         viewer={viewer}
         linkedTeam={userRecord?.linkedTeam ?? null}
+        gradeBand={userRecord?.gradeBand ?? null}
         recommendedAction={missionControl.recommendedAction}
         recommendedMission={missionControl.recommendedMission}
         openProjects={missionControl.openProjects}

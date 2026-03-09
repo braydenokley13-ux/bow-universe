@@ -23,8 +23,8 @@ export default async function LoginPage({
       <section className="space-y-6">
         <SectionHeading
           eyebrow="Access"
-          title="Sign in to the research terminal"
-          description="Credentials auth is live. Use a seeded demo account, a commissioner-created student account, or a class-code signup account to enter the research terminal."
+          title="Sign in to your classroom workspace"
+          description="Students can use a teacher-made account or a class-code signup. Teachers and commissioners can use the commissioner account below."
         />
 
         <div className="panel p-6">
@@ -49,9 +49,9 @@ export default async function LoginPage({
       </section>
 
       <section className="panel p-6">
-        <h3 className="font-display text-2xl text-ink">Credentials sign-in</h3>
+        <h3 className="font-display text-2xl text-ink">Sign in</h3>
         <p className="mt-2 text-sm leading-6 text-ink/70">
-          Signing in enables writing, comments, proposal voting, and commissioner actions.
+          Signing in opens your class home, your current work, and the next step your class should take.
         </p>
 
         {resolvedSearchParams.activated === "1" ? (

@@ -6,6 +6,7 @@ import { AdminClassCodeManager } from "@/components/admin-class-code-manager";
 import { AdminStudentMomentumDesk } from "@/components/admin-student-momentum-desk";
 import { SectionHeading } from "@/components/section-heading";
 import { AdminDecisionDesk } from "@/components/admin-decision-desk";
+import { AdminGlossaryManager } from "@/components/admin-glossary-manager";
 import { AdminIssueWorkbench } from "@/components/admin-issue-workbench";
 import { AdminNewsroomDesk } from "@/components/admin-newsroom-desk";
 import { AdminProposalWorkflowCard } from "@/components/admin-proposal-workflow-card";
@@ -15,18 +16,20 @@ import { AdminStudentAccountManager } from "@/components/admin-student-account-m
 import {
   advanceSeasonAction,
   createStudentAccountAction,
+  deleteGlossaryTermAction,
   recordDecisionAction,
+  saveGlossaryTermAction,
   saveIssueAction,
   updateProposalStatusAction,
   updateUserRoleAction
 } from "@/server/actions";
 import { requireAdmin } from "@/server/auth";
-import { getAdminPageData } from "@/server/data";
 import {
   createChallengeAction,
   createClassCodeAction,
   createNewsPostAction
 } from "@/server/community-actions";
+import { getAllGlossaryTerms, getAdminPageData } from "@/server/data";
 import { getProposalReviewReadiness } from "@/lib/review-readiness";
 import { shouldShowDecisionDesk } from "@/lib/workflow-guards";
 import { getAdminShowcaseData } from "@/server/showcase-data";
@@ -40,8 +43,9 @@ export default async function AdminPage({
   const resolvedSearchParams = (await searchParams) ?? {};
   const [
     { users, issues, proposals, currentSeason, rulesets, teams, activity, publications },
-    showcaseData
-  ] = await Promise.all([getAdminPageData(), getAdminShowcaseData()]);
+    showcaseData,
+    glossaryTerms
+  ] = await Promise.all([getAdminPageData(), getAdminShowcaseData(), getAllGlossaryTerms()]);
   const activationBaseUrl = process.env.NEXTAUTH_URL ?? "http://localhost:3000";
 
   const proposalReadiness = new Map(
@@ -125,6 +129,37 @@ export default async function AdminPage({
       <section className="panel p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
+            <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Class launch flow</p>
+            <h3 className="mt-3 font-display text-2xl text-ink">Set up a class in four small moves</h3>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-ink/70">
+              Create a class code, pick the grade-band default, link a cohort, set milestone dates, and then use the student momentum desk to catch anyone who gets stuck.
+            </p>
+          </div>
+          <Link
+            href="/admin/cohorts"
+            className="rounded-full border border-line bg-white/80 px-4 py-2 text-sm font-medium text-ink"
+          >
+            Open cohorts
+          </Link>
+        </div>
+
+        <div className="mt-6 grid gap-4 md:grid-cols-4">
+          {[
+            "1. Create a class code with the right default team and grade band.",
+            "2. Link that code to a cohort so signups drop into the right class group.",
+            "3. Add milestone dates for first draft, revision, and publishing checkpoints.",
+            "4. Watch the momentum desk for students who still need a fast intervention."
+          ].map((step) => (
+            <div key={step} className="rounded-2xl border border-line bg-white/60 p-4 text-sm leading-6 text-ink/68">
+              {step}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
             <h3 className="font-display text-2xl text-ink">Season controls</h3>
             <p className="mt-2 text-sm leading-6 text-ink/70">
               Advance the league one season at a time. This recalculates team snapshots, applies the pending ruleset, and records new pressure points.
@@ -155,6 +190,7 @@ export default async function AdminPage({
       <AdminClassCodeManager
         action={createClassCodeAction}
         teams={teams}
+        cohorts={showcaseData.cohorts}
         classCodes={showcaseData.classCodes}
       />
 
@@ -295,6 +331,30 @@ export default async function AdminPage({
             </div>
           ))}
         </div>
+      </section>
+
+      <section className="panel p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Cohorts</p>
+            <h3 className="mt-1 font-display text-2xl text-ink">Teacher cohort management</h3>
+            <p className="mt-1 text-sm text-ink/60">Create cohorts, assign students, set milestone deadlines, and track submission progress.</p>
+          </div>
+          <Link
+            href="/admin/cohorts"
+            className="rounded-full border border-accent bg-accent px-4 py-2 text-sm font-medium text-white"
+          >
+            Manage cohorts →
+          </Link>
+        </div>
+      </section>
+
+      <section className="panel p-6">
+        <AdminGlossaryManager
+          terms={glossaryTerms}
+          saveAction={saveGlossaryTermAction}
+          deleteAction={deleteGlossaryTermAction}
+        />
       </section>
     </div>
   );

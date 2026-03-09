@@ -90,6 +90,7 @@ type LeagueMetrics = {
 type StudentDashboardProps = {
   viewer: Viewer;
   linkedTeam: { id: string; name: string } | null;
+  gradeBand: "GRADE_5_6" | "GRADE_7_8" | null;
   recommendedAction: RecommendedAction;
   recommendedMission: RecommendedMission | null;
   openProjects: ActiveProject[];
@@ -125,6 +126,7 @@ function eventHref(entityType: string | null, entityId: string | null) {
 export function StudentDashboard({
   viewer,
   linkedTeam,
+  gradeBand,
   recommendedAction,
   recommendedMission,
   openProjects,
@@ -139,15 +141,20 @@ export function StudentDashboard({
   const totalOpen = openProjects.length + openProposals.length;
   const { currentSeason, metrics, activity } = league;
   const workbenchItems = submittedFirstProject ? [...openProjects, ...openProposals] : openProjects;
+  const isYoungerTrack = gradeBand === "GRADE_5_6" && !submittedFirstProject;
 
   return (
     <div className="space-y-10">
       <section className="grid gap-6 xl:grid-cols-[1.08fr_0.92fr]">
         <article className="panel p-8">
-          <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-accent">Student mission control</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.28em] text-accent">
+            {isYoungerTrack ? "Today's work" : "Student mission control"}
+          </p>
           <h2 className="mt-3 font-display text-4xl text-ink">{viewer.name}</h2>
           <p className="mt-3 max-w-3xl text-base leading-7 text-ink/70">
-            This is your working desk: what needs attention, what is ready to move, and where your best next contribution will help the league most.
+            {isYoungerTrack
+              ? "You only need one good start today: pick an issue, answer the small questions, and finish one clear project."
+              : "This is your working desk: what needs attention, what is ready to move, and where your best next contribution will help the league most."}
           </p>
 
           <div className="mt-6 grid gap-4 sm:grid-cols-3">
@@ -171,7 +178,9 @@ export function StudentDashboard({
         </article>
 
         <article className="rounded-[28px] border border-accent/20 bg-accent/5 p-6 shadow-panel">
-          <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Best next move</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">
+            {isYoungerTrack ? "Do this next" : "Best next move"}
+          </p>
           <h3 className="mt-3 font-display text-3xl text-ink">{recommendedAction.title}</h3>
           <p className="mt-4 text-sm leading-6 text-ink/72">{recommendedAction.body}</p>
           <div className="mt-6 flex flex-wrap gap-3">
@@ -190,6 +199,32 @@ export function StudentDashboard({
           </div>
         </article>
       </section>
+
+      {isYoungerTrack ? (
+        <section className="panel p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">First-day checklist</p>
+              <h3 className="mt-3 font-display text-2xl text-ink">Keep the start small</h3>
+            </div>
+            <span className="rounded-full border border-line bg-white/70 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.18em] text-ink/60">
+              One project first
+            </span>
+          </div>
+
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
+            {[
+              "1. Pick one live issue instead of opening every page.",
+              "2. Finish the guided project before worrying about proposals or challenges.",
+              "3. Use the feedback and portfolio pages only after your first draft is moving."
+            ].map((item) => (
+              <div key={item} className="rounded-2xl border border-line bg-white/60 p-4 text-sm leading-6 text-ink/68">
+                {item}
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {recommendedMission ? (
         <section className="panel p-6">

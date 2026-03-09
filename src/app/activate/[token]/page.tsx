@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Badge } from "@/components/badge";
 import { SectionHeading } from "@/components/section-heading";
 import { StudentActivationForm } from "@/components/student-activation-form";
+import { gradeBandLabels } from "@/lib/types";
 import { prisma } from "@/lib/prisma";
 import { activateStudentInviteAction } from "@/server/actions";
 import { getViewer } from "@/server/auth";
@@ -129,6 +130,10 @@ export default async function ActivateStudentPage({
               {invite.user.linkedTeam?.name ?? "No team linked yet"}
             </p>
             <p>
+              <span className="font-medium text-ink">Grade band:</span>{" "}
+              {invite.user.gradeBand ? gradeBandLabels[invite.user.gradeBand] : "Choose during activation"}
+            </p>
+            <p>
               <span className="font-medium text-ink">Link expires:</span>{" "}
               {invite.expiresAt.toLocaleDateString("en-US")}
             </p>
@@ -157,7 +162,11 @@ export default async function ActivateStudentPage({
             This link expired before it was used. Ask the commissioner to create a new student invite.
           </div>
         ) : (
-          <StudentActivationForm action={activateStudentInviteAction} token={invite.token} />
+          <StudentActivationForm
+            action={activateStudentInviteAction}
+            token={invite.token}
+            initialGradeBand={invite.user.gradeBand}
+          />
         )}
 
         <div className="mt-6">

@@ -2,12 +2,41 @@ import Link from "next/link";
 
 import { Badge } from "@/components/badge";
 import { SectionHeading } from "@/components/section-heading";
+import { StudentFeatureGate } from "@/components/student-feature-gate";
+import { shouldGateAdvancedStudentWork } from "@/lib/classroom";
 import { getViewer } from "@/server/auth";
-import { getChallengesPageData } from "@/server/showcase-data";
+import { getChallengesPageData, getStudentExperienceState } from "@/server/showcase-data";
 
 export default async function ChallengesPage() {
   const viewer = await getViewer();
   const challenges = await getChallengesPageData(viewer?.id ?? null);
+  const experience =
+    viewer?.role === "STUDENT" ? await getStudentExperienceState(viewer.id) : null;
+  const isLocked =
+    viewer?.role === "STUDENT" &&
+    shouldGateAdvancedStudentWork({
+      hasSubmittedFirstProject: experience?.hasSubmittedFirstProject ?? false
+    });
+
+  if (isLocked) {
+    return (
+      <div className="space-y-8">
+        <SectionHeading
+          eyebrow="Challenges"
+          title="Competitive research without arcade nonsense"
+          description="Challenges reward real milestones: joining strong work, submitting it, improving it, publishing it, and earning commissioner spotlight."
+        />
+
+        <StudentFeatureGate
+          eyebrow="Come back soon"
+          title="Challenges make more sense after one real project"
+          description="Finish your first guided project first. That way the challenge board feels like a next step instead of another giant choice."
+          primaryHref={experience?.currentProjectId ? `/projects/${experience.currentProjectId}/edit` : "/start"}
+          primaryLabel={experience?.currentProjectId ? "Keep building your project" : "Start your first project"}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">

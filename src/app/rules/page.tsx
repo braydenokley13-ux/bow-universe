@@ -1,6 +1,10 @@
+import { StudentFeatureGate } from "@/components/student-feature-gate";
 import { Badge } from "@/components/badge";
 import { SectionHeading } from "@/components/section-heading";
+import { shouldGateYoungerTrackReferencePages } from "@/lib/classroom";
+import { getViewer } from "@/server/auth";
 import { getRuleSetsData } from "@/server/data";
+import { getStudentExperienceState } from "@/server/showcase-data";
 
 function explainChange(label: string, next: string) {
   const text = label.toLowerCase();
@@ -21,11 +25,43 @@ function explainChange(label: string, next: string) {
 }
 
 export default async function RulesPage() {
-  const ruleSets = await getRuleSetsData();
+  const viewer = await getViewer();
+  const [ruleSets, experience] = await Promise.all([
+    getRuleSetsData(),
+    viewer?.role === "STUDENT" ? getStudentExperienceState(viewer.id) : Promise.resolve(null)
+  ]);
   const activeRuleSet = ruleSets.find((ruleSet) => ruleSet.isActive) ?? ruleSets[0];
   const previousRuleSet = activeRuleSet
     ? ruleSets.find((ruleSet) => ruleSet.version === activeRuleSet.version - 1)
     : null;
+  const isLocked =
+    viewer?.role === "STUDENT" &&
+    shouldGateYoungerTrackReferencePages({
+      gradeBand: experience?.gradeBand ?? null,
+      hasSubmittedFirstProject: experience?.hasSubmittedFirstProject ?? false
+    });
+
+  if (isLocked) {
+    return (
+      <div className="space-y-8">
+        <SectionHeading
+          eyebrow="Rules"
+          title="Versioned rulebook"
+          description="The rulebook now explains the active environment first, then shows how it changed from the last version so a new reader can understand why the numbers matter."
+        />
+
+        <StudentFeatureGate
+          eyebrow="Unlocks after your first project"
+          title="Learn the full rulebook after you finish one project"
+          description="For the younger track, it is better to start with one real issue first. Come back to the full rulebook after your first project is submitted and the league language feels more familiar."
+          primaryHref={experience?.currentProjectId ? `/projects/${experience.currentProjectId}/edit` : "/start"}
+          primaryLabel={experience?.currentProjectId ? "Open current project" : "Start your first project"}
+          secondaryHref="/glossary"
+          secondaryLabel="Open glossary"
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">

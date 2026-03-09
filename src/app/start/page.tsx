@@ -21,6 +21,7 @@ export default async function StartPage() {
         <OnboardingWizard
           missions={missionControl.missionCandidates}
           linkedTeamName={missionControl.user?.linkedTeam?.name ?? null}
+          gradeBand={missionControl.user?.gradeBand ?? null}
         />
       </div>
     );
@@ -30,8 +31,8 @@ export default async function StartPage() {
     <div className="space-y-8">
       <SectionHeading
         eyebrow="Start here"
-        title="Sign in to get a recommended mission"
-        description="Students now start from live league issues instead of from a blank lane choice. Sign in to see the first missions that best fit your team and the current league pressure."
+        title="Sign in to get your first mission"
+        description="Students now start from live league issues instead of from a blank lane choice. Sign in to see the mission, section, and first small steps that fit your class."
       />
 
       <section className="panel p-8">

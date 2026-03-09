@@ -52,6 +52,39 @@ function daysSince(date: Date, now: Date) {
   return Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
 }
 
+export async function getStudentExperienceState(userId: string) {
+  const [user, projects] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        gradeBand: true,
+        onboardingCompletedAt: true
+      }
+    }),
+    prisma.project.findMany({
+      where: { createdByUserId: userId },
+      select: {
+        id: true,
+        submissionStatus: true,
+        updatedAt: true
+      },
+      orderBy: { updatedAt: "desc" }
+    })
+  ]);
+
+  const currentProject =
+    projects.find((project) =>
+      openProjectStatuses.includes(project.submissionStatus)
+    ) ?? null;
+
+  return {
+    gradeBand: user?.gradeBand ?? null,
+    onboardingCompletedAt: user?.onboardingCompletedAt ?? null,
+    hasSubmittedFirstProject: hasStudentSubmittedProject(projects),
+    currentProjectId: currentProject?.id ?? null
+  };
+}
+
 export async function getNewsPageData() {
   const [editorials, autoEvents] = await Promise.all([
     prisma.newsPost.findMany({
@@ -177,13 +210,16 @@ export async function getChallengePageData(challengeId: string, viewerId?: strin
 
 export async function getAdminShowcaseData() {
   const now = new Date();
-  const [classCodes, newsPosts, challenges, students, activeIssues] = await Promise.all([
+  const [classCodes, newsPosts, challenges, students, activeIssues, cohorts] = await Promise.all([
     prisma.classCode.findMany({
       include: {
         commissioner: {
           select: { name: true }
         },
         linkedTeam: {
+          select: { id: true, name: true }
+        },
+        cohort: {
           select: { id: true, name: true }
         },
         signups: {
@@ -223,6 +259,7 @@ export async function getAdminShowcaseData() {
       select: {
         id: true,
         name: true,
+        gradeBand: true,
         createdAt: true,
         onboardingCompletedAt: true,
         linkedTeam: {
@@ -268,6 +305,13 @@ export async function getAdminShowcaseData() {
         }
       },
       orderBy: [{ severity: "desc" }, { updatedAt: "desc" }]
+    }),
+    prisma.cohort.findMany({
+      select: {
+        id: true,
+        name: true
+      },
+      orderBy: { name: "asc" }
     })
   ]);
 
@@ -523,6 +567,7 @@ export async function getAdminShowcaseData() {
 
   return {
     classCodes,
+    cohorts,
     newsPosts,
     challenges: challenges.map((challenge) => ({
       ...challenge,

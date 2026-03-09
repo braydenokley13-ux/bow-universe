@@ -6,12 +6,16 @@ import { Badge } from "@/components/badge";
 import { PrintButton } from "@/components/print-button";
 import { SectionHeading } from "@/components/section-heading";
 import { SourceLineageCard } from "@/components/source-lineage-card";
+import { StudentFeatureGate } from "@/components/student-feature-gate";
+import { shouldGateAdvancedStudentWork } from "@/lib/classroom";
 import { getLaneLabel, getPublicationDisplayLabel } from "@/lib/publications";
+import { getViewer } from "@/server/auth";
 import {
   getPublicationPageData,
   parseProjectJson,
   parseProposalJson
 } from "@/server/data";
+import { getStudentExperienceState } from "@/server/showcase-data";
 
 export default async function PublicationDetailPage({
   params
@@ -19,13 +23,44 @@ export default async function PublicationDetailPage({
   params: Promise<{ publicationSlug: string }>;
 }) {
   const { publicationSlug } = await params;
-  const record = await getPublicationPageData(publicationSlug);
+  const viewer = await getViewer();
+  const [record, experience] = await Promise.all([
+    getPublicationPageData(publicationSlug),
+    viewer?.role === "STUDENT" ? getStudentExperienceState(viewer.id) : Promise.resolve(null)
+  ]);
 
   if (!record?.publication) {
     notFound();
   }
 
   const { publication } = record;
+  const isLocked =
+    viewer?.role === "STUDENT" &&
+    shouldGateAdvancedStudentWork({
+      hasSubmittedFirstProject: experience?.hasSubmittedFirstProject ?? false
+    });
+
+  if (isLocked) {
+    return (
+      <div className="space-y-8">
+        <SectionHeading
+          eyebrow="Research Publication"
+          title={publication.title}
+          description={publication.abstract}
+        />
+
+        <StudentFeatureGate
+          eyebrow="Read examples later"
+          title="Published examples unlock after your first project is underway"
+          description="You do not need to study polished archive pieces before you begin. Finish your own first project first, then come back here for comparison examples."
+          primaryHref={experience?.currentProjectId ? `/projects/${experience.currentProjectId}/edit` : "/start"}
+          primaryLabel={experience?.currentProjectId ? "Open current project" : "Start your first project"}
+          secondaryHref="/research"
+          secondaryLabel="Back to archive"
+        />
+      </div>
+    );
+  }
 
   if (record.project) {
     const parsed = parseProjectJson(record.project);

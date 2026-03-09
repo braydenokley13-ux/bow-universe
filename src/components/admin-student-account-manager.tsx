@@ -1,4 +1,5 @@
 import { Badge } from "@/components/badge";
+import { gradeBandLabels } from "@/lib/types";
 import type { createStudentAccountAction } from "@/server/actions";
 
 type AdminStudentAccountManagerProps = {
@@ -14,6 +15,7 @@ type AdminStudentAccountManagerProps = {
     id: string;
     name: string;
     email: string;
+    gradeBand: keyof typeof gradeBandLabels | null;
     linkedTeam: { name: string } | null;
     commissioner: { name: string } | null;
     studentInvites: Array<{
@@ -128,7 +130,7 @@ export function AdminStudentAccountManager({
         </div>
       ) : null}
 
-      <form action={action} className="mt-6 grid gap-4 rounded-2xl border border-line bg-white/55 p-4 md:grid-cols-[1.2fr_1.1fr_1fr_auto]">
+      <form action={action} className="mt-6 grid gap-4 rounded-2xl border border-line bg-white/55 p-4 md:grid-cols-[1.2fr_1.1fr_1fr_1fr_auto]">
         <div>
           <label htmlFor="student-name" className="block font-mono text-xs uppercase tracking-[0.2em] text-accent">
             Student name
@@ -174,6 +176,25 @@ export function AdminStudentAccountManager({
           </select>
         </div>
 
+        <div>
+          <label htmlFor="student-grade-band" className="block font-mono text-xs uppercase tracking-[0.2em] text-accent">
+            Grade band
+          </label>
+          <select
+            id="student-grade-band"
+            name="gradeBand"
+            defaultValue=""
+            className="mt-2 w-full rounded-2xl border border-line bg-white px-4 py-3 text-sm text-ink outline-none focus:border-accent"
+          >
+            <option value="">Choose later during onboarding</option>
+            {Object.entries(gradeBandLabels).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <div className="flex items-end">
           <button
             type="submit"
@@ -198,6 +219,8 @@ export function AdminStudentAccountManager({
                   <p className="font-medium text-ink">{student.name}</p>
                   <p className="mt-1 text-sm text-ink/62">{student.email}</p>
                   <p className="mt-2 text-xs uppercase tracking-[0.2em] text-ink/50">
+                    {student.gradeBand ? `Track: ${gradeBandLabels[student.gradeBand]}` : "Track not chosen yet"}
+                    {" · "}
                     {student.linkedTeam ? `Linked team: ${student.linkedTeam.name}` : "No linked team yet"}
                     {student.commissioner ? ` · Created by ${student.commissioner.name}` : ""}
                   </p>
