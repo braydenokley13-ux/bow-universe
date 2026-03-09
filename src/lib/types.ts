@@ -1,4 +1,5 @@
 import {
+  GradeBand,
   MarketSizeTier,
   ProjectType,
   PublicationType,
@@ -208,4 +209,14 @@ export const publicationTypeLabels: Record<PublicationType, string> = {
   POLICY_MEMO: "Policy Memo",
   TEAM_STRATEGY_DOSSIER: "Team Strategy Dossier",
   RESEARCH_BRIEF: "Research Brief"
+};
+
+export const gradeBandLabels: Record<GradeBand, string> = {
+  GRADE_5_6: "Grades 5-6",
+  GRADE_7_8: "Grades 7-8"
+};
+
+export const gradeBandDescriptions: Record<GradeBand, string> = {
+  GRADE_5_6: "Smaller steps, fewer choices at once, and clearer helper text.",
+  GRADE_7_8: "More independence, broader tools, and deeper project choices."
 };

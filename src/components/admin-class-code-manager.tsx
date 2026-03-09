@@ -1,9 +1,14 @@
 import { Badge } from "@/components/badge";
+import { gradeBandLabels } from "@/lib/types";
 import type { createClassCodeAction } from "@/server/community-actions";
 
 type AdminClassCodeManagerProps = {
   action: typeof createClassCodeAction;
   teams: Array<{
+    id: string;
+    name: string;
+  }>;
+  cohorts: Array<{
     id: string;
     name: string;
   }>;
@@ -15,7 +20,9 @@ type AdminClassCodeManagerProps = {
     active: boolean;
     expiresAt: Date | null;
     createdAt: Date;
+    defaultGradeBand: keyof typeof gradeBandLabels | null;
     linkedTeam: { id: string; name: string } | null;
+    cohort: { id: string; name: string } | null;
     commissioner: { name: string };
     signups: Array<{ id: string }>;
   }>;
@@ -24,6 +31,7 @@ type AdminClassCodeManagerProps = {
 export function AdminClassCodeManager({
   action,
   teams,
+  cohorts,
   classCodes
 }: AdminClassCodeManagerProps) {
   return (
@@ -39,7 +47,7 @@ export function AdminClassCodeManager({
         <Badge>{classCodes.length} codes</Badge>
       </div>
 
-      <form action={action} className="mt-6 grid gap-4 rounded-2xl border border-line bg-white/55 p-4 lg:grid-cols-[1fr_1fr_1fr_0.9fr]">
+      <form action={action} className="mt-6 grid gap-4 rounded-2xl border border-line bg-white/55 p-4 lg:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_1fr_1fr_auto]">
         <div>
           <label htmlFor="class-code-label" className="block font-mono text-xs uppercase tracking-[0.2em] text-accent">
             Label
@@ -80,6 +88,44 @@ export function AdminClassCodeManager({
             {teams.map((team) => (
               <option key={team.id} value={team.id}>
                 {team.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label htmlFor="class-code-grade-band" className="block font-mono text-xs uppercase tracking-[0.2em] text-accent">
+            Default grade band
+          </label>
+          <select
+            id="class-code-grade-band"
+            name="defaultGradeBand"
+            defaultValue=""
+            className="mt-2 w-full rounded-2xl border border-line bg-white px-4 py-3 text-sm text-ink outline-none focus:border-accent"
+          >
+            <option value="">Let students choose later</option>
+            {Object.entries(gradeBandLabels).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label htmlFor="class-code-cohort" className="block font-mono text-xs uppercase tracking-[0.2em] text-accent">
+            Cohort
+          </label>
+          <select
+            id="class-code-cohort"
+            name="cohortId"
+            defaultValue=""
+            className="mt-2 w-full rounded-2xl border border-line bg-white px-4 py-3 text-sm text-ink outline-none focus:border-accent"
+          >
+            <option value="">No cohort link yet</option>
+            {cohorts.map((cohort) => (
+              <option key={cohort.id} value={cohort.id}>
+                {cohort.name}
               </option>
             ))}
           </select>
@@ -126,6 +172,8 @@ export function AdminClassCodeManager({
               <span>Signups {classCode.signups.length}</span>
               <span>Created by {classCode.commissioner.name}</span>
               {classCode.linkedTeam ? <span>Default team {classCode.linkedTeam.name}</span> : null}
+              {classCode.defaultGradeBand ? <span>{gradeBandLabels[classCode.defaultGradeBand]}</span> : null}
+              {classCode.cohort ? <span>Cohort {classCode.cohort.name}</span> : null}
             </div>
 
             <p className="mt-3 text-xs text-ink/55">

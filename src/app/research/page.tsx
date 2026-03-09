@@ -2,8 +2,12 @@ import Link from "next/link";
 
 import { Badge } from "@/components/badge";
 import { SectionHeading } from "@/components/section-heading";
+import { StudentFeatureGate } from "@/components/student-feature-gate";
+import { shouldGateAdvancedStudentWork } from "@/lib/classroom";
 import { getLaneLabel, getPublicationDisplayLabel } from "@/lib/publications";
+import { getViewer } from "@/server/auth";
 import { getResearchPageData } from "@/server/data";
+import { getStudentExperienceState } from "@/server/showcase-data";
 
 type BrowseMode = "recent" | "lane" | "type" | "context";
 
@@ -40,15 +44,42 @@ export default async function ResearchPage({
 }: {
   searchParams?: Promise<{ view?: string }>;
 }) {
-  const publications = await getResearchPageData();
+  const [viewer, publications] = await Promise.all([getViewer(), getResearchPageData()]);
+  const experience =
+    viewer?.role === "STUDENT" ? await getStudentExperienceState(viewer.id) : null;
   const resolvedSearchParams = (await searchParams) ?? {};
   const view = (resolvedSearchParams.view as BrowseMode | undefined) ?? "recent";
+  const isLocked =
+    viewer?.role === "STUDENT" &&
+    shouldGateAdvancedStudentWork({
+      hasSubmittedFirstProject: experience?.hasSubmittedFirstProject ?? false
+    });
   const groups = publications.reduce<Record<string, typeof publications>>((accumulator, publication) => {
     const key = groupLabel(view, publication);
     accumulator[key] ??= [];
     accumulator[key].push(publication);
     return accumulator;
   }, {});
+
+  if (isLocked) {
+    return (
+      <div className="space-y-8">
+        <SectionHeading
+          eyebrow="Research Archive"
+          title="Published work across the BOW Universe"
+          description="Use the archive to read polished work by lane, type, or context. Each card now tells you why it is worth opening, not just what it is called."
+        />
+
+        <StudentFeatureGate
+          eyebrow="Read examples later"
+          title="The archive is here to help after your first draft is moving"
+          description="You do not need to read everything before you begin. Start your own project first, then use this archive when you want examples of polished work."
+          primaryHref={experience?.currentProjectId ? `/projects/${experience.currentProjectId}/edit` : "/start"}
+          primaryLabel={experience?.currentProjectId ? "Keep building your project" : "Start your first project"}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">

@@ -2,9 +2,12 @@ import Link from "next/link";
 
 import { Badge } from "@/components/badge";
 import { SectionHeading } from "@/components/section-heading";
+import { StudentFeatureGate } from "@/components/student-feature-gate";
+import { shouldGateAdvancedStudentWork } from "@/lib/classroom";
 import { getProposalStageNote } from "@/lib/discovery-guidance";
 import { parseProposalJson, getProposalsPageData } from "@/server/data";
 import { getViewer } from "@/server/auth";
+import { getStudentExperienceState } from "@/server/showcase-data";
 import { publicationTypeLabels } from "@/lib/types";
 
 const statuses = [
@@ -39,8 +42,15 @@ export default async function ProposalsPage({
   searchParams?: Promise<{ status?: string }>;
 }) {
   const [viewer, proposals] = await Promise.all([getViewer(), getProposalsPageData()]);
+  const experience =
+    viewer?.role === "STUDENT" ? await getStudentExperienceState(viewer.id) : null;
   const resolvedSearchParams = (await searchParams) ?? {};
   const selectedStatus = resolvedSearchParams.status ?? "ALL";
+  const isLocked =
+    viewer?.role === "STUDENT" &&
+    shouldGateAdvancedStudentWork({
+      hasSubmittedFirstProject: experience?.hasSubmittedFirstProject ?? false
+    });
   const filteredProposals = proposals.filter(
     (proposal) => selectedStatus === "ALL" || proposal.status === selectedStatus
   );
@@ -57,6 +67,28 @@ export default async function ProposalsPage({
           ["DRAFT", "SUBMITTED", "REVISION_REQUESTED"].includes(proposal.status)
       )
     : [];
+
+  if (isLocked) {
+    return (
+      <div className="space-y-8">
+        <SectionHeading
+          eyebrow="Proposals"
+          title="Policy memos and governance records"
+          description="This board now surfaces open memo work first, then shows where each proposal sits in the governance and publication pipeline."
+        />
+
+        <StudentFeatureGate
+          eyebrow="Unlocks after your first project"
+          title="Finish one project before you worry about formal memos"
+          description="Proposals are the deeper rule-change path. Start by finishing one guided project first, then come back here when you are ready to argue for a full league rule change."
+          primaryHref={experience?.currentProjectId ? `/projects/${experience.currentProjectId}/edit` : "/start"}
+          primaryLabel={experience?.currentProjectId ? "Open current project" : "Start first project"}
+          secondaryHref="/start"
+          secondaryLabel="Go to start page"
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">

@@ -7,6 +7,7 @@ import {
   DecisionType,
   ExternalPublicationTarget,
   FeedbackType,
+  GradeBand,
   IssueStatus,
   Prisma,
   ProjectType,
@@ -31,6 +32,7 @@ import {
 } from "@/lib/publications";
 import { prisma } from "@/lib/prisma";
 import { parseRuleDiff } from "@/lib/rules";
+import { hasStudentSubmittedProject } from "@/lib/student-flow";
 import type { ReferenceEntry } from "@/lib/types";
 import { parseJsonText, parseStringList } from "@/lib/utils";
 import { requireAdmin, requireUser } from "@/server/auth";
@@ -87,12 +89,30 @@ const issueSchema = z.object({
 const studentAccountSchema = z.object({
   name: z.string().trim().min(2).max(80),
   email: z.string().trim().email(),
-  linkedTeamId: z.string().trim().optional().nullable()
+  linkedTeamId: z.string().trim().optional().nullable(),
+  gradeBand: z
+    .string()
+    .trim()
+    .optional()
+    .nullable()
+    .transform((value) => value || null)
+    .refine((value) => value === null || Object.values(GradeBand).includes(value as GradeBand), {
+      message: "Invalid grade band."
+    })
 });
 
 const studentActivationSchema = z
   .object({
     token: z.string().min(20),
+    gradeBand: z
+      .string()
+      .trim()
+      .optional()
+      .nullable()
+      .transform((value) => value || null)
+      .refine((value) => value === null || Object.values(GradeBand).includes(value as GradeBand), {
+        message: "Invalid grade band."
+      }),
     password: z.string().min(8),
     confirmPassword: z.string().min(8)
   })
@@ -608,18 +628,76 @@ async function saveProposalRecord(params: {
   };
 }
 
-export async function completeOnboardingAction() {
+export async function completeOnboardingAction(input?: { gradeBand?: GradeBand | null }) {
   const viewer = await requireUser();
+  const gradeBand = input?.gradeBand ?? null;
   await prisma.user.update({
     where: { id: viewer.id },
-    data: { onboardingCompletedAt: new Date() }
+    data: {
+      onboardingCompletedAt: new Date(),
+      ...(gradeBand ? { gradeBand } : {})
+    }
   });
   revalidatePath("/");
+  revalidatePath("/start");
+  revalidatePath("/students/me");
+}
+
+export async function updateStudentGradeBandAction(formData: FormData) {
+  const viewer = await requireUser();
+  const gradeBandInput = String(formData.get("gradeBand") ?? "").trim();
+
+  if (!Object.values(GradeBand).includes(gradeBandInput as GradeBand)) {
+    return;
+  }
+
+  await prisma.user.update({
+    where: { id: viewer.id },
+    data: {
+      gradeBand: gradeBandInput as GradeBand
+    }
+  });
+
+  revalidatePath("/");
+  revalidatePath("/start");
+  revalidatePath("/students/me");
+}
+
+export async function saveStudentGradeBandSelectionAction(input: {
+  gradeBand: GradeBand | null;
+}) {
+  const viewer = await requireUser();
+
+  if (!input.gradeBand || !Object.values(GradeBand).includes(input.gradeBand)) {
+    return;
+  }
+
+  await prisma.user.update({
+    where: { id: viewer.id },
+    data: {
+      gradeBand: input.gradeBand
+    }
+  });
+
+  revalidatePath("/");
+  revalidatePath("/start");
+  revalidatePath("/students/me");
 }
 
 export async function createProjectAction(formData: FormData) {
   const viewer = await requireUser();
   const projectId = String(formData.get("projectId") ?? "").trim() || undefined;
+  const hadSubmittedProjectBefore = hasStudentSubmittedProject(
+    await prisma.project.findMany({
+      where: {
+        createdByUserId: viewer.id,
+        ...(projectId ? { id: { not: projectId } } : {})
+      },
+      select: {
+        submissionStatus: true
+      }
+    })
+  );
   const { project, issueIds, teamId, submissionStatus } = await saveProjectRecord({
     formData,
     actor: viewer,
@@ -648,6 +726,16 @@ export async function createProjectAction(formData: FormData) {
 
   revalidatePath("/projects");
   revalidatePath("/");
+  revalidatePath("/students/me");
+
+  if (
+    formData.get("beginnerMode") === "1" &&
+    !hadSubmittedProjectBefore &&
+    hasStudentSubmittedProject([{ submissionStatus: project.submissionStatus }])
+  ) {
+    redirect("/students/me?firstProject=1");
+  }
+
   redirect(`/projects/${project.id}`);
 }
 
@@ -1136,7 +1224,8 @@ export async function createStudentAccountAction(formData: FormData) {
   const parsed = studentAccountSchema.safeParse({
     name: formData.get("name"),
     email: formData.get("email"),
-    linkedTeamId: formData.get("linkedTeamId")
+    linkedTeamId: formData.get("linkedTeamId"),
+    gradeBand: formData.get("gradeBand")
   });
 
   if (!parsed.success) {
@@ -1178,6 +1267,7 @@ export async function createStudentAccountAction(formData: FormData) {
         email,
         passwordHash: placeholderPasswordHash,
         role: UserRole.STUDENT,
+        gradeBand: (data.gradeBand as GradeBand | null) ?? null,
         linkedTeamId,
         commissionerId: viewer.id
       }
@@ -1202,6 +1292,7 @@ export async function createStudentAccountAction(formData: FormData) {
       metadata: {
         email,
         linkedTeamId,
+        gradeBand: data.gradeBand,
         expiresAt
       }
     });
@@ -1219,6 +1310,7 @@ export async function createStudentAccountAction(formData: FormData) {
 export async function activateStudentInviteAction(formData: FormData) {
   const parsed = studentActivationSchema.safeParse({
     token: formData.get("token"),
+    gradeBand: formData.get("gradeBand"),
     password: formData.get("password"),
     confirmPassword: formData.get("confirmPassword")
   });
@@ -1255,7 +1347,8 @@ export async function activateStudentInviteAction(formData: FormData) {
     await tx.user.update({
       where: { id: invite.userId },
       data: {
-        passwordHash
+        passwordHash,
+        gradeBand: (data.gradeBand as GradeBand | null) ?? invite.user.gradeBand ?? null
       }
     });
 
@@ -1274,7 +1367,8 @@ export async function activateStudentInviteAction(formData: FormData) {
       entityId: invite.userId,
       createdByUserId: invite.userId,
       metadata: {
-        inviteId: invite.id
+        inviteId: invite.id,
+        gradeBand: (data.gradeBand as GradeBand | null) ?? invite.user.gradeBand ?? null
       }
     });
   });
@@ -1492,4 +1586,157 @@ export async function advanceSeasonAction() {
   revalidatePath("/issues");
   revalidatePath("/rules");
   revalidatePath("/proposals");
+}
+
+// ── Glossary actions ──────────────────────────────────────────────────────────
+
+const glossaryTermSchema = z.object({
+  id: z.string().optional(),
+  slug: z.string().min(1).max(80).regex(/^[a-z0-9-]+$/),
+  term: z.string().min(2).max(100),
+  definition: z.string().min(10).max(1000),
+  bowExample: z.string().max(500).optional(),
+  category: z.string().max(60).optional(),
+  sortOrder: z.coerce.number().int().default(0)
+});
+
+export async function saveGlossaryTermAction(formData: FormData) {
+  await requireAdmin();
+  const raw = {
+    id: String(formData.get("id") ?? "").trim() || undefined,
+    slug: String(formData.get("slug") ?? "").trim(),
+    term: String(formData.get("term") ?? "").trim(),
+    definition: String(formData.get("definition") ?? "").trim(),
+    bowExample: String(formData.get("bowExample") ?? "").trim() || undefined,
+    category: String(formData.get("category") ?? "").trim() || undefined,
+    sortOrder: String(formData.get("sortOrder") ?? "0")
+  };
+  const parsed = glossaryTermSchema.parse(raw);
+
+  await prisma.glossaryTerm.upsert({
+    where: { slug: parsed.slug },
+    update: {
+      term: parsed.term,
+      definition: parsed.definition,
+      bowExample: parsed.bowExample ?? null,
+      category: parsed.category ?? null,
+      sortOrder: parsed.sortOrder
+    },
+    create: {
+      slug: parsed.slug,
+      term: parsed.term,
+      definition: parsed.definition,
+      bowExample: parsed.bowExample ?? null,
+      category: parsed.category ?? null,
+      sortOrder: parsed.sortOrder
+    }
+  });
+
+  revalidatePath("/glossary");
+  revalidatePath("/admin");
+  revalidatePath("/api/glossary");
+}
+
+export async function deleteGlossaryTermAction(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("id") ?? "").trim();
+  if (!id) return;
+  await prisma.glossaryTerm.delete({ where: { id } });
+  revalidatePath("/glossary");
+  revalidatePath("/admin");
+}
+
+// ── Cohort actions ────────────────────────────────────────────────────────────
+
+export async function createCohortAction(formData: FormData) {
+  const viewer = await requireAdmin();
+  const name = String(formData.get("name") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim() || null;
+  if (!name) return;
+  await prisma.cohort.create({ data: { name, description, createdByUserId: viewer.id } });
+  revalidatePath("/admin");
+  revalidatePath("/admin/cohorts");
+}
+
+export async function updateCohortAction(formData: FormData) {
+  await requireAdmin();
+  const cohortId = String(formData.get("cohortId") ?? "").trim();
+  const name = String(formData.get("name") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim() || null;
+  if (!cohortId || !name) return;
+  await prisma.cohort.update({ where: { id: cohortId }, data: { name, description } });
+  revalidatePath("/admin");
+  revalidatePath("/admin/cohorts");
+  revalidatePath(`/admin/cohorts/${cohortId}`);
+}
+
+export async function deleteCohortAction(formData: FormData) {
+  await requireAdmin();
+  const cohortId = String(formData.get("cohortId") ?? "").trim();
+  if (!cohortId) return;
+  await prisma.cohort.delete({ where: { id: cohortId } });
+  revalidatePath("/admin");
+  revalidatePath("/admin/cohorts");
+}
+
+export async function addCohortMemberAction(formData: FormData) {
+  await requireAdmin();
+  const cohortId = String(formData.get("cohortId") ?? "").trim();
+  const userId = String(formData.get("userId") ?? "").trim();
+  if (!cohortId || !userId) return;
+  await prisma.cohortMember.upsert({
+    where: { cohortId_userId: { cohortId, userId } },
+    update: {},
+    create: { cohortId, userId }
+  });
+  revalidatePath("/admin");
+  revalidatePath("/admin/cohorts");
+  revalidatePath(`/admin/cohorts/${cohortId}`);
+}
+
+export async function removeCohortMemberAction(formData: FormData) {
+  await requireAdmin();
+  const cohortId = String(formData.get("cohortId") ?? "").trim();
+  const userId = String(formData.get("userId") ?? "").trim();
+  if (!cohortId || !userId) return;
+  await prisma.cohortMember.delete({ where: { cohortId_userId: { cohortId, userId } } });
+  revalidatePath("/admin");
+  revalidatePath("/admin/cohorts");
+  revalidatePath(`/admin/cohorts/${cohortId}`);
+}
+
+export async function saveCohortMilestoneAction(formData: FormData) {
+  await requireAdmin();
+  const cohortId = String(formData.get("cohortId") ?? "").trim();
+  const milestoneId = String(formData.get("milestoneId") ?? "").trim() || undefined;
+  const label = String(formData.get("label") ?? "").trim();
+  const targetDate = String(formData.get("targetDate") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim() || null;
+  if (!cohortId || !label || !targetDate) return;
+
+  const date = new Date(targetDate);
+  if (isNaN(date.getTime())) return;
+
+  if (milestoneId) {
+    await prisma.cohortMilestone.update({
+      where: { id: milestoneId },
+      data: { label, targetDate: date, description }
+    });
+  } else {
+    await prisma.cohortMilestone.create({
+      data: { cohortId, label, targetDate: date, description }
+    });
+  }
+  revalidatePath("/admin/cohorts");
+  revalidatePath(`/admin/cohorts/${cohortId}`);
+}
+
+export async function deleteCohortMilestoneAction(formData: FormData) {
+  await requireAdmin();
+  const milestoneId = String(formData.get("milestoneId") ?? "").trim();
+  const cohortId = String(formData.get("cohortId") ?? "").trim();
+  if (!milestoneId) return;
+  await prisma.cohortMilestone.delete({ where: { id: milestoneId } });
+  revalidatePath("/admin/cohorts");
+  revalidatePath(`/admin/cohorts/${cohortId}`);
 }

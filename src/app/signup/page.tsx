@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 
 import { Badge } from "@/components/badge";
 import { SectionHeading } from "@/components/section-heading";
+import { gradeBandDescriptions, gradeBandLabels } from "@/lib/types";
 import { getViewer } from "@/server/auth";
 import { signUpWithClassCodeAction } from "@/server/community-actions";
 
@@ -46,7 +47,7 @@ export default async function SignupPage({
         <SectionHeading
           eyebrow="Student signup"
           title="Create your own student account"
-          description="Use a commissioner-provided class code to register instantly, set your password, and enter the BOW League research terminal."
+          description="Use a class code from your teacher or commissioner, choose the section that fits your class, and get into your first project fast."
         />
 
         <div className="panel p-6">
@@ -63,7 +64,7 @@ export default async function SignupPage({
               2. Your name, email, and a password with at least 8 characters.
             </div>
             <div className="rounded-2xl border border-line bg-white/60 p-4">
-              3. A plan for what you want to investigate, build, or propose once you get in.
+              3. The grade-band section your class is using, if your teacher already told you.
             </div>
           </div>
         </div>
@@ -120,6 +121,29 @@ export default async function SignupPage({
               placeholder="jordan.rivera@bow.local"
               className="mt-2 w-full rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
             />
+          </div>
+
+          <div>
+            <label htmlFor="signup-grade-band" className="block font-mono text-xs uppercase tracking-[0.22em] text-accent">
+              Grade band
+            </label>
+            <select
+              id="signup-grade-band"
+              name="gradeBand"
+              defaultValue=""
+              className="mt-2 w-full rounded-2xl border border-line bg-white/80 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
+            >
+              <option value="">Use the class-code default or choose later</option>
+              {Object.entries(gradeBandLabels).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <p className="mt-2 text-xs leading-5 text-ink/60">
+              {gradeBandLabels.GRADE_5_6}: {gradeBandDescriptions.GRADE_5_6} {gradeBandLabels.GRADE_7_8}:{" "}
+              {gradeBandDescriptions.GRADE_7_8}
+            </p>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">

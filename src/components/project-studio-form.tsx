@@ -714,6 +714,7 @@ export function ProjectStudioForm({
         <input type="hidden" name="methodsSummary" value={effectiveValues.methodsSummary} readOnly />
         <input type="hidden" name="projectType" value={effectiveValues.projectType} readOnly />
         <input type="hidden" name="lanePrimary" value={effectiveValues.lanePrimary} readOnly />
+        <input type="hidden" name="beginnerMode" value={beginnerMode ? "1" : "0"} readOnly />
         <input type="hidden" name="teamId" value={effectiveValues.teamId} readOnly />
         <input type="hidden" name="supportingProposalId" value={effectiveValues.supportingProposalId} readOnly />
         <input type="hidden" name="artifactLinks" value={effectiveValues.artifactLinks} readOnly />
@@ -954,7 +955,9 @@ export function ProjectStudioForm({
         "A real issue removes the blank-page problem and gives every later answer a clear anchor.",
       nextMove: selectedIssue ? "Keep this issue and move to lane choice." : "Pick one issue card to continue.",
       strongExample:
-        "Strong issue choice: one live problem with clear pressure and a reason a student can explain in one sentence."
+        "Strong issue choice: one live problem with clear pressure and a reason a student can explain in one sentence.",
+      sentenceStarter: "I want to study this issue because...",
+      celebrationNote: "Nice. Your project has a real job now."
     },
     lane: {
       title: "Choose lane",
@@ -964,7 +967,9 @@ export function ProjectStudioForm({
         "The lane changes the shape of the final publication and keeps the project from drifting.",
       nextMove: "Choose the lane that makes your next action the clearest.",
       strongExample:
-        "Strong lane choice: investigators explain a pattern, operators make a plan, tool builders make a helper, reform architects support a policy change."
+        "Strong lane choice: investigators explain a pattern, operators make a plan, tool builders make a helper, reform architects support a policy change.",
+      sentenceStarter: "This lane fits best because...",
+      celebrationNote: "Good choice. You know what kind of work you are making."
     },
     question: {
       title: "Big question",
@@ -973,7 +978,9 @@ export function ProjectStudioForm({
       whyItMatters: "A clear question keeps the evidence and recommendations from scattering.",
       nextMove: "Write one question that starts with how, why, what, or which.",
       strongExample:
-        "Strong question: How does this issue change the choices teams can make over the next two seasons?"
+        "Strong question: How does this issue change the choices teams can make over the next two seasons?",
+      sentenceStarter: "How does this issue affect...",
+      celebrationNote: "Good. The project now has one big question to answer."
     },
     context: {
       title: "Why it matters",
@@ -983,7 +990,9 @@ export function ProjectStudioForm({
         "This is the section that convinces a reader the issue is real and worth attention.",
       nextMove: "Name who is affected, what is getting harder, and why the pressure matters now.",
       strongExample:
-        "Strong context: The new cap pressure hits mid-tier teams hardest because it removes the tools they usually use to recover from one bad contract."
+        "Strong context: The new cap pressure hits mid-tier teams hardest because it removes the tools they usually use to recover from one bad contract.",
+      sentenceStarter: "This matters now because...",
+      celebrationNote: "Good. A new reader can now tell why this issue matters."
     },
     evidence: {
       title: "Add evidence",
@@ -992,7 +1001,9 @@ export function ProjectStudioForm({
       whyItMatters: "Without evidence, the project feels like a guess instead of research.",
       nextMove: "Add the clearest example first, then the next supporting detail.",
       strongExample:
-        "Strong evidence: team examples, payroll comparisons, issue notes, or a rule reference that directly supports the claim."
+        "Strong evidence: team examples, payroll comparisons, issue notes, or a rule reference that directly supports the claim.",
+      sentenceStarter: "One piece of evidence that helps is...",
+      celebrationNote: "Nice. You have real support instead of only an opinion."
     },
     analysis: {
       title: "What it means",
@@ -1001,7 +1012,9 @@ export function ProjectStudioForm({
       whyItMatters: "Analysis is where you turn raw notes into a useful idea.",
       nextMove: "Tell the reader what pattern the evidence points to and why it matters.",
       strongExample:
-        "Strong analysis: The evidence shows the pressure is really about timing, not only payroll size, because teams lose flexibility before they lose spending intent."
+        "Strong analysis: The evidence shows the pressure is really about timing, not only payroll size, because teams lose flexibility before they lose spending intent.",
+      sentenceStarter: "This evidence shows that...",
+      celebrationNote: "Nice. You turned raw notes into an idea a reader can follow."
     },
     recommendations: {
       title: "Next step",
@@ -1011,7 +1024,9 @@ export function ProjectStudioForm({
         "Good projects do not stop at explanation. They point to action, testing, or decision-making.",
       nextMove: "Write one action, decision, or next question the league should take seriously.",
       strongExample:
-        "Strong next step: test a narrower adjustment first so the league can reduce pressure without removing every planning tool at once."
+        "Strong next step: test a narrower adjustment first so the league can reduce pressure without removing every planning tool at once.",
+      sentenceStarter: "The clearest next step is...",
+      celebrationNote: "Good. Your project ends with a clear next move."
     },
     title: {
       title: "Working title",
@@ -1019,7 +1034,9 @@ export function ProjectStudioForm({
       rightNow: "Give the project a plain-language title that matches the question.",
       whyItMatters: "A simple title helps the draft feel real and easier to return to later.",
       nextMove: "Write a title that says what the project studies and where the pressure is.",
-      strongExample: "Strong title: How the second apron changes small-market planning."
+      strongExample: "Strong title: How the second apron changes small-market planning.",
+      sentenceStarter: "How ... changes ...",
+      celebrationNote: "Great. The draft now has a title you can find later."
     },
     references: {
       title: "Sources",
@@ -1029,7 +1046,9 @@ export function ProjectStudioForm({
         "Sources make the project usable by other students, reviewers, and future teams.",
       nextMove: "Add at least one source line in the requested format.",
       strongExample:
-        "Strong source line: Team payroll sheet | https://example.com | DATASET | Shows the spending change."
+        "Strong source line: Team payroll sheet | https://example.com | DATASET | Shows the spending change.",
+      sentenceStarter: "Source name | https://... | DATASET | This source helps because...",
+      celebrationNote: "Good. Another reader can now check where your evidence came from."
     },
     review: {
       title: "Final check",
@@ -1040,7 +1059,9 @@ export function ProjectStudioForm({
         ? "Submit when the draft reads clearly from question to next step."
         : "Fix the missing pieces listed here, then submit.",
       strongExample:
-        "Strong final check: the issue, question, evidence, meaning, and next step all connect without extra explanation."
+        "Strong final check: the issue, question, evidence, meaning, and next step all connect without extra explanation.",
+      sentenceStarter: "I checked that my question, evidence, and next step all match.",
+      celebrationNote: "Nice work. This first project is ready for the next classroom step."
     }
   } satisfies Record<
     BeginnerProjectStepId,
@@ -1051,6 +1072,8 @@ export function ProjectStudioForm({
       whyItMatters: string;
       nextMove: string;
       strongExample: string;
+      sentenceStarter: string;
+      celebrationNote: string;
     }
   >;
 
@@ -1564,6 +1587,9 @@ export function ProjectStudioForm({
             nextMove: beginnerCurrentContent.nextMove,
             missingItems: beginnerMissingItems,
             strongExample: beginnerCurrentContent.strongExample,
+            sentenceStarter: beginnerCurrentContent.sentenceStarter,
+            celebrationNote:
+              beginnerMissingItems.length === 0 ? beginnerCurrentContent.celebrationNote : null,
             beginnerMode: true,
             repairLabel: repairTarget?.label ?? null
           }}

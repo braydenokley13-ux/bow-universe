@@ -1,28 +1,59 @@
 import Link from "next/link";
 import { Activity } from "lucide-react";
 
+import {
+  buildStudentNavItems,
+  fullStudentNavItems,
+  publicNavItems
+} from "@/lib/classroom";
+import { prisma } from "@/lib/prisma";
+import { hasStudentSubmittedProject } from "@/lib/student-flow";
 import { getViewer } from "@/server/auth";
 
+import { GlossaryPanel } from "./glossary-panel";
 import { MainNav } from "./main-nav";
 import { MobileNav } from "./mobile-nav";
 import { SignOutButton } from "./sign-out-button";
 
-const navItems = [
-  { href: "/", label: "Home", icon: "Home" as const },
-  { href: "/start", label: "Start", icon: "Compass" as const },
-  { href: "/news", label: "News", icon: "Newspaper" as const },
-  { href: "/challenges", label: "Challenges", icon: "Trophy" as const },
-  { href: "/teams", label: "Teams", icon: "Users" as const },
-  { href: "/rules", label: "Rules", icon: "BookOpen" as const },
-  { href: "/issues", label: "Issues", icon: "AlertCircle" as const },
-  { href: "/projects", label: "Projects", icon: "FolderKanban" as const },
-  { href: "/proposals", label: "Proposals", icon: "FileText" as const },
-  { href: "/research", label: "Research", icon: "FlaskConical" as const },
-  { href: "/admin", label: "Admin", icon: "Settings" as const }
-];
-
 export async function AppShell({ children }: { children: React.ReactNode }) {
   const viewer = await getViewer();
+  const studentShellData =
+    viewer?.role === "STUDENT"
+      ? await prisma.user.findUnique({
+          where: { id: viewer.id },
+          select: {
+            gradeBand: true,
+            createdProjects: {
+              select: {
+                id: true,
+                submissionStatus: true,
+                updatedAt: true
+              },
+              orderBy: { updatedAt: "desc" }
+            }
+          }
+        })
+      : null;
+  const hasSubmittedFirstProject = hasStudentSubmittedProject(studentShellData?.createdProjects ?? []);
+  const currentProject =
+    studentShellData?.createdProjects.find((project) =>
+      [
+        "DRAFT",
+        "SUBMITTED",
+        "REVISION_REQUESTED",
+        "APPROVED_FOR_INTERNAL_PUBLICATION"
+      ].includes(project.submissionStatus)
+    ) ?? null;
+  const navItems =
+    viewer?.role === "ADMIN"
+      ? [...fullStudentNavItems, { href: "/admin", label: "Admin", icon: "Settings" as const }]
+      : viewer?.role === "STUDENT"
+        ? buildStudentNavItems({
+            gradeBand: studentShellData?.gradeBand ?? null,
+            hasSubmittedFirstProject,
+            currentProjectHref: currentProject ? `/projects/${currentProject.id}/edit` : "/projects/new?beginner=1"
+        })
+        : publicNavItems;
 
   return (
     <div className="min-h-screen">
@@ -96,6 +127,8 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
       <main className="mx-auto flex max-w-7xl flex-col gap-8 px-4 py-8 lg:px-8 print:max-w-none print:px-0 print:py-0">
         {children}
       </main>
+
+      <GlossaryPanel />
     </div>
   );
 }

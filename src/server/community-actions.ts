@@ -5,6 +5,7 @@ import { randomBytes } from "node:crypto";
 import { hash } from "bcryptjs";
 import {
   ChallengeEntryType,
+  GradeBand,
   LaneTag,
   Prisma,
   ProposalStatus,
@@ -29,6 +30,16 @@ const classCodeSchema = z.object({
   label: z.string().trim().min(3).max(80),
   description: z.string().trim().max(240).optional().nullable(),
   linkedTeamId: z.string().trim().optional().nullable(),
+  defaultGradeBand: z
+    .string()
+    .trim()
+    .optional()
+    .nullable()
+    .transform((value) => value || null)
+    .refine((value) => value === null || Object.values(GradeBand).includes(value as GradeBand), {
+      message: "Invalid grade band."
+    }),
+  cohortId: z.string().trim().optional().nullable(),
   expiresAt: z.string().trim().optional().nullable()
 });
 
@@ -37,6 +48,15 @@ const signupSchema = z
     classCode: z.string().trim().min(4),
     name: z.string().trim().min(2).max(80),
     email: z.string().trim().email(),
+    gradeBand: z
+      .string()
+      .trim()
+      .optional()
+      .nullable()
+      .transform((value) => value || null)
+      .refine((value) => value === null || Object.values(GradeBand).includes(value as GradeBand), {
+        message: "Invalid grade band."
+      }),
     password: z.string().min(8),
     confirmPassword: z.string().min(8)
   })
@@ -119,6 +139,8 @@ export async function createClassCodeAction(formData: FormData) {
     label: formData.get("label"),
     description: formData.get("description"),
     linkedTeamId: formData.get("linkedTeamId"),
+    defaultGradeBand: formData.get("defaultGradeBand"),
+    cohortId: formData.get("cohortId"),
     expiresAt: formData.get("expiresAt")
   });
 
@@ -138,6 +160,18 @@ export async function createClassCodeAction(formData: FormData) {
     }
   }
 
+  const cohortId = parsed.data.cohortId || null;
+  if (cohortId) {
+    const cohort = await prisma.cohort.findUnique({
+      where: { id: cohortId },
+      select: { id: true }
+    });
+
+    if (!cohort) {
+      return;
+    }
+  }
+
   const classCode = await prisma.classCode.create({
     data: {
       code: buildClassCode(parsed.data.label),
@@ -145,6 +179,8 @@ export async function createClassCodeAction(formData: FormData) {
       description: parsed.data.description || null,
       commissionerId: viewer.id,
       linkedTeamId,
+      defaultGradeBand: (parsed.data.defaultGradeBand as GradeBand | null) ?? null,
+      cohortId,
       expiresAt: parseOptionalDateValue(parsed.data.expiresAt)
     }
   });
@@ -158,11 +194,14 @@ export async function createClassCodeAction(formData: FormData) {
     createdByUserId: viewer.id,
     metadata: {
       code: classCode.code,
-      linkedTeamId
+      linkedTeamId,
+      cohortId,
+      defaultGradeBand: classCode.defaultGradeBand
     }
   });
 
   revalidatePath("/admin");
+  revalidatePath("/admin/cohorts");
 }
 
 export async function signUpWithClassCodeAction(formData: FormData) {
@@ -170,6 +209,7 @@ export async function signUpWithClassCodeAction(formData: FormData) {
     classCode: formData.get("classCode"),
     name: formData.get("name"),
     email: formData.get("email"),
+    gradeBand: formData.get("gradeBand"),
     password: formData.get("password"),
     confirmPassword: formData.get("confirmPassword")
   });
@@ -206,16 +246,38 @@ export async function signUpWithClassCodeAction(formData: FormData) {
   }
 
   const passwordHash = await hash(parsed.data.password, 10);
-  const user = await prisma.user.create({
-    data: {
-      name: parsed.data.name,
-      email,
-      passwordHash,
-      role: UserRole.STUDENT,
-      commissionerId: classCode.commissionerId,
-      linkedTeamId: classCode.linkedTeamId,
-      signedUpViaClassCodeId: classCode.id
+  const selectedGradeBand = classCode.defaultGradeBand ?? ((parsed.data.gradeBand as GradeBand | null) ?? null);
+  const user = await prisma.$transaction(async (tx) => {
+    const createdUser = await tx.user.create({
+      data: {
+        name: parsed.data.name,
+        email,
+        passwordHash,
+        role: UserRole.STUDENT,
+        gradeBand: selectedGradeBand,
+        commissionerId: classCode.commissionerId,
+        linkedTeamId: classCode.linkedTeamId,
+        signedUpViaClassCodeId: classCode.id
+      }
+    });
+
+    if (classCode.cohortId) {
+      await tx.cohortMember.upsert({
+        where: {
+          cohortId_userId: {
+            cohortId: classCode.cohortId,
+            userId: createdUser.id
+          }
+        },
+        update: {},
+        create: {
+          cohortId: classCode.cohortId,
+          userId: createdUser.id
+        }
+      });
     }
+
+    return createdUser;
   });
 
   await createActivityEvent(prisma, {
@@ -227,11 +289,14 @@ export async function signUpWithClassCodeAction(formData: FormData) {
     createdByUserId: user.id,
     metadata: asJson({
       classCodeId: classCode.id,
-      commissionerId: classCode.commissionerId
+      commissionerId: classCode.commissionerId,
+      gradeBand: selectedGradeBand,
+      cohortId: classCode.cohortId
     })
   });
 
   revalidatePath("/admin");
+  revalidatePath("/admin/cohorts");
   revalidatePath("/login");
   redirect(`/login?email=${encodeURIComponent(user.email)}&signedUp=1`);
 }

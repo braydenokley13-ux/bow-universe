@@ -3,12 +3,14 @@ import { notFound } from "next/navigation";
 
 import { Badge } from "@/components/badge";
 import { SectionHeading } from "@/components/section-heading";
+import { StudentFeatureGate } from "@/components/student-feature-gate";
+import { shouldGateAdvancedStudentWork } from "@/lib/classroom";
 import { getViewer } from "@/server/auth";
 import {
   joinChallengeAction,
   spotlightChallengeEntryAction
 } from "@/server/community-actions";
-import { getChallengePageData } from "@/server/showcase-data";
+import { getChallengePageData, getStudentExperienceState } from "@/server/showcase-data";
 
 function sourceHref(sourceType: "PROJECT" | "PROPOSAL", sourceId: string) {
   return sourceType === "PROJECT" ? `/projects/${sourceId}` : `/proposals/${sourceId}`;
@@ -21,10 +23,41 @@ export default async function ChallengeDetailPage({
 }) {
   const { challengeId } = await params;
   const viewer = await getViewer();
-  const challenge = await getChallengePageData(challengeId, viewer?.id ?? null);
+  const [challenge, experience] = await Promise.all([
+    getChallengePageData(challengeId, viewer?.id ?? null),
+    viewer?.role === "STUDENT" ? getStudentExperienceState(viewer.id) : Promise.resolve(null)
+  ]);
 
   if (!challenge) {
     notFound();
+  }
+
+  const isLocked =
+    viewer?.role === "STUDENT" &&
+    shouldGateAdvancedStudentWork({
+      hasSubmittedFirstProject: experience?.hasSubmittedFirstProject ?? false
+    });
+
+  if (isLocked) {
+    return (
+      <div className="space-y-8">
+        <SectionHeading
+          eyebrow="Challenge detail"
+          title={challenge.title}
+          description={challenge.summary}
+        />
+
+        <StudentFeatureGate
+          eyebrow="Challenges unlock next"
+          title="Finish your first project before entering a challenge"
+          description="Challenges are meant to build on work you have already started. Finish your first guided project, then come back and enter it here if it fits."
+          primaryHref={experience?.currentProjectId ? `/projects/${experience.currentProjectId}/edit` : "/start"}
+          primaryLabel={experience?.currentProjectId ? "Open current project" : "Start your first project"}
+          secondaryHref="/challenges"
+          secondaryLabel="Back to challenges"
+        />
+      </div>
+    );
   }
 
   return (

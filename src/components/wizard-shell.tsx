@@ -16,6 +16,8 @@ type WizardShellProps = {
     nextMove: string;
     missingItems: string[];
     strongExample: string;
+    sentenceStarter?: string;
+    celebrationNote?: string | null;
     beginnerMode?: boolean;
     repairLabel?: string | null;
   };
@@ -174,6 +176,20 @@ export function WizardShell({
                 <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Strong example</p>
                 <p className="mt-2 text-sm leading-6 text-ink/68">{coachPanel.strongExample}</p>
               </div>
+
+              {coachPanel.sentenceStarter ? (
+                <div className="mt-4 rounded-2xl border border-line bg-white/85 px-4 py-3">
+                  <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Sentence starter</p>
+                  <p className="mt-2 text-sm leading-6 text-ink/68">{coachPanel.sentenceStarter}</p>
+                </div>
+              ) : null}
+
+              {coachPanel.celebrationNote ? (
+                <div className="mt-4 rounded-2xl border border-success/30 bg-success/10 px-4 py-3">
+                  <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-success">Ready to move on</p>
+                  <p className="mt-2 text-sm leading-6 text-success">{coachPanel.celebrationNote}</p>
+                </div>
+              ) : null}
             </section>
           </div>
         ) : null}
