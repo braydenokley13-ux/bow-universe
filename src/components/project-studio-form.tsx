@@ -201,6 +201,16 @@ function resolveBeginnerStep(stepParam: string | null, fallback: BeginnerProject
     : fallback;
 }
 
+function readProjectStepFromQuery(stepParam: string | null) {
+  return isProjectCoachStepId(stepParam) ? stepParam : null;
+}
+
+function readBeginnerStepFromQuery(stepParam: string | null) {
+  return beginnerProjectStepOrder.includes(stepParam as BeginnerProjectStepId)
+    ? (stepParam as BeginnerProjectStepId)
+    : null;
+}
+
 function uniqueLaneTags(values: LaneTag[], lanePrimary: LaneTag) {
   return Array.from(new Set([...values, lanePrimary])) as LaneTag[];
 }
@@ -235,7 +245,6 @@ export function ProjectStudioForm({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const autosaveTimerRef = useRef<number | null>(null);
-  const stepSyncRef = useRef(false);
   const autosaveReadyRef = useRef(false);
   const currentStepQuery = searchParams.get("step");
   const repairQuery = searchParams.get("repair");
@@ -386,30 +395,17 @@ export function ProjectStudioForm({
       return;
     }
 
-    if (!stepSyncRef.current) {
-      stepSyncRef.current = true;
-      setCurrentStepId(
-        resolveStep(
-          currentStepQuery,
-          repairTarget
-            ? (assessment.fields[repairTarget.fieldId].stepId as ProjectCoachStepId)
-            : assessment.firstIncompleteStepId
-        )
-      );
+    const queryStepId = readProjectStepFromQuery(currentStepQuery);
+    if (queryStepId) {
+      setCurrentStepId((current) => (current === queryStepId ? current : queryStepId));
       return;
     }
 
-    const resolvedStep = resolveStep(
-      currentStepQuery,
-      repairTarget
-        ? (assessment.fields[repairTarget.fieldId].stepId as ProjectCoachStepId)
-        : assessment.firstIncompleteStepId
-    );
-
-    if (resolvedStep !== currentStepId) {
-      setCurrentStepId(resolvedStep);
+    if (repairTarget) {
+      const repairStepId = assessment.fields[repairTarget.fieldId].stepId as ProjectCoachStepId;
+      setCurrentStepId((current) => (current === repairStepId ? current : repairStepId));
     }
-  }, [assessment, assessment.firstIncompleteStepId, beginnerMode, currentStepId, currentStepQuery, repairTarget]);
+  }, [assessment, beginnerMode, currentStepQuery, repairTarget]);
 
   useEffect(() => {
     if (beginnerMode) {
@@ -424,30 +420,17 @@ export function ProjectStudioForm({
       return;
     }
 
-    if (!stepSyncRef.current) {
-      stepSyncRef.current = true;
-      setCurrentBeginnerStepId(
-        resolveBeginnerStep(
-          currentStepQuery,
-          repairTarget
-            ? getBeginnerStepIdForField(repairTarget.fieldId)
-            : getFirstIncompleteBeginnerStep(effectiveValues)
-        )
-      );
+    const queryStepId = readBeginnerStepFromQuery(currentStepQuery);
+    if (queryStepId) {
+      setCurrentBeginnerStepId((current) => (current === queryStepId ? current : queryStepId));
       return;
     }
 
-    const resolvedStep = resolveBeginnerStep(
-      currentStepQuery,
-      repairTarget
-        ? getBeginnerStepIdForField(repairTarget.fieldId)
-        : getFirstIncompleteBeginnerStep(effectiveValues)
-    );
-
-    if (resolvedStep !== currentBeginnerStepId) {
-      setCurrentBeginnerStepId(resolvedStep);
+    if (repairTarget) {
+      const repairStepId = getBeginnerStepIdForField(repairTarget.fieldId);
+      setCurrentBeginnerStepId((current) => (current === repairStepId ? current : repairStepId));
     }
-  }, [beginnerMode, currentBeginnerStepId, currentStepQuery, effectiveValues, repairTarget]);
+  }, [beginnerMode, currentStepQuery, repairTarget]);
 
   useEffect(() => {
     if (!beginnerMode) {
