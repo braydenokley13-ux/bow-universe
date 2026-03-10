@@ -24,7 +24,7 @@ export default async function LoginPage({
         <SectionHeading
           eyebrow="Access"
           title="Sign in to your classroom workspace"
-          description="Students can use a teacher-made account or a class-code signup. Teachers and commissioners can use the commissioner account below."
+          description="Students can use a teacher-made account or a class-code signup. First-time students now go straight into the universe tour after sign-in."
         />
 
         <div className="panel p-6">
@@ -40,8 +40,13 @@ export default async function LoginPage({
               <p className="font-mono text-sm text-ink/75">bowuniverse</p>
             </div>
             <div className="rounded-2xl border border-line bg-white/60 p-4">
-              <p className="font-medium text-ink">Student</p>
+              <p className="font-medium text-ink">Returning student</p>
               <p className="mt-1 font-mono text-sm text-ink/75">riya-patel@bow.local</p>
+              <p className="font-mono text-sm text-ink/75">bowuniverse</p>
+            </div>
+            <div className="rounded-2xl border border-line bg-white/60 p-4">
+              <p className="font-medium text-ink">Fresh student</p>
+              <p className="mt-1 font-mono text-sm text-ink/75">taylor-west@bow.local</p>
               <p className="font-mono text-sm text-ink/75">bowuniverse</p>
             </div>
           </div>
@@ -51,18 +56,18 @@ export default async function LoginPage({
       <section className="panel p-6">
         <h3 className="font-display text-2xl text-ink">Sign in</h3>
         <p className="mt-2 text-sm leading-6 text-ink/70">
-          Signing in opens your class home, your current work, and the next step your class should take.
+          Signing in opens your class home. Fresh students will see the full universe tour before their first project.
         </p>
 
         {resolvedSearchParams.activated === "1" ? (
           <div className="mt-5 rounded-2xl border border-success/30 bg-success/10 px-4 py-3 text-sm text-success">
-            Account activated. Sign in with the email and password you just set.
+            Account activated. Sign in with the email and password you just set to begin the universe tour.
           </div>
         ) : null}
 
         {resolvedSearchParams.signedUp === "1" ? (
           <div className="mt-5 rounded-2xl border border-success/30 bg-success/10 px-4 py-3 text-sm text-success">
-            Account created. Sign in with the email and password you just set.
+            Account created. Sign in with the email and password you just set to begin the universe tour.
           </div>
         ) : null}
 

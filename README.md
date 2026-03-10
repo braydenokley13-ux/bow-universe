@@ -81,7 +81,8 @@ npm run check
 ## Demo Access
 
 - Commissioner: `commissioner@bow.local` / `bowuniverse`
-- Student: `riya-patel@bow.local` / `bowuniverse`
+- Returning student: `riya-patel@bow.local` / `bowuniverse`
+- Fresh student: `taylor-west@bow.local` / `bowuniverse`
 
 Students can also sign up from `/signup` with a commissioner-created class code.
 

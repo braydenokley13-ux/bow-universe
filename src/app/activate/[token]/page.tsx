@@ -110,7 +110,7 @@ export default async function ActivateStudentPage({
         <SectionHeading
           eyebrow="Student access"
           title={`Activate ${invite.user.name}`}
-          description="Set a password once, then use your email and that password on the normal login page."
+          description="Set a password once, then use your email and that password on the normal login page to start the universe tour."
         />
 
         <div className="panel p-6">
@@ -144,7 +144,7 @@ export default async function ActivateStudentPage({
       <section className="panel p-6">
         <h3 className="font-display text-2xl text-ink">Set your password</h3>
         <p className="mt-2 text-sm leading-6 text-ink/70">
-          Use at least 8 characters. After activation, sign in on the normal login screen.
+          Use at least 8 characters. After activation, sign in on the normal login screen and the first-time tour will take over from there.
         </p>
 
         {notice ? (

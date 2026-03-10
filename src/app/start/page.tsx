@@ -2,26 +2,85 @@ import Link from "next/link";
 
 import { OnboardingWizard } from "@/components/onboarding-wizard";
 import { SectionHeading } from "@/components/section-heading";
+import { StudentUniverseOnboarding } from "@/components/student-universe-onboarding";
+import { shouldForceStudentOnboarding } from "@/lib/student-onboarding";
 import { getViewer } from "@/server/auth";
-import { getStudentMissionControlData } from "@/server/showcase-data";
+import { getStudentOnboardingData } from "@/server/showcase-data";
 
-export default async function StartPage() {
+export default async function StartPage({
+  searchParams
+}: {
+  searchParams?: Promise<{ tour?: string; replay?: string }>;
+}) {
   const viewer = await getViewer();
+  const resolvedSearchParams = (await searchParams) ?? {};
 
   if (viewer?.role === "STUDENT") {
-    const missionControl = await getStudentMissionControlData(viewer.id);
+    const onboardingData = await getStudentOnboardingData(viewer.id);
+
+    if (!onboardingData) {
+      return null;
+    }
+
+    const forceTour = shouldForceStudentOnboarding({
+      role: viewer.role,
+      onboardingExperienceVersion: onboardingData.onboardingExperienceVersion,
+      hasSubmittedFirstProject: onboardingData.hasSubmittedFirstProject,
+      hasOpenProjectOrProposal: onboardingData.hasOpenProjectOrProposal
+    });
+    const replayTour = resolvedSearchParams.replay === "1";
+    const showTour = forceTour || resolvedSearchParams.tour === "1" || replayTour;
+
+    if (showTour) {
+      return (
+        <div className="space-y-8">
+          <SectionHeading
+            eyebrow="Start here"
+            title={replayTour ? "Replay the student universe tour" : "Take the full universe tour before your first mission"}
+            description={
+              replayTour
+                ? "Walk back through the five-step universe guide, then return to the mission hub when you are ready."
+                : "This first-time path shows the whole student-side universe one piece at a time, then drops you into the guided first project with a real issue already picked."
+            }
+          />
+          <StudentUniverseOnboarding
+            data={onboardingData}
+            mode={forceTour ? "forced" : "replay"}
+          />
+        </div>
+      );
+    }
 
     return (
       <div className="space-y-8">
         <SectionHeading
           eyebrow="Start here"
           title="Pick one mission and begin"
-          description="Start from a live league issue, not from an empty form. The first project path now sets up the issue, suggests the lane, and breaks the writing into small steps."
+          description="Use this page as your mission hub. Start from a live league issue, or replay the full universe tour if you want the guided walkthrough again."
         />
+        <section className="panel p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">
+                Optional replay
+              </p>
+              <h2 className="mt-3 font-display text-2xl text-ink">Want the full walkthrough again?</h2>
+              <p className="mt-2 text-sm leading-6 text-ink/70">
+                Replay the five-step universe tour anytime, then come back here to pick a fresh mission.
+              </p>
+            </div>
+            <Link
+              href="/start?replay=1"
+              className="rounded-full border border-line bg-white/80 px-4 py-2 text-sm font-medium text-ink"
+            >
+              Replay universe tour
+            </Link>
+          </div>
+        </section>
         <OnboardingWizard
-          missions={missionControl.missionCandidates}
-          linkedTeamName={missionControl.user?.linkedTeam?.name ?? null}
-          gradeBand={missionControl.user?.gradeBand ?? null}
+          missions={onboardingData.missionCandidates}
+          linkedTeamName={onboardingData.linkedTeam?.name ?? null}
+          gradeBand={onboardingData.gradeBand}
         />
       </div>
     );

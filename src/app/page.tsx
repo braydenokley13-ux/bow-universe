@@ -1,12 +1,12 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { Badge } from "@/components/badge";
 import { MetricCard } from "@/components/metric-card";
-import { OnboardingWizard } from "@/components/onboarding-wizard";
 import { SectionHeading } from "@/components/section-heading";
 import { StudentDashboard } from "@/components/student-dashboard";
 import { buildDashboardGuidance } from "@/lib/discovery-guidance";
-import { prisma } from "@/lib/prisma";
+import { shouldForceStudentOnboarding } from "@/lib/student-onboarding";
 import { formatCompactCurrency } from "@/lib/utils";
 import { advanceSeasonAction } from "@/server/actions";
 import { getViewer } from "@/server/auth";
@@ -17,7 +17,10 @@ import {
   getProposalsPageData,
   getResearchPageData
 } from "@/server/data";
-import { getStudentMissionControlData } from "@/server/showcase-data";
+import {
+  getStudentMissionControlData,
+  getStudentOnboardingData
+} from "@/server/showcase-data";
 
 function eventHref(entityType: string | null, entityId: string | null) {
   if (!entityType || !entityId) return "#";
@@ -59,45 +62,30 @@ export default async function HomePage() {
   }
 
   if (viewer.role === "STUDENT") {
-    const [userRecord, missionControl, league] = await Promise.all([
-      prisma.user.findUnique({
-        where: { id: viewer.id },
-        select: {
-          onboardingCompletedAt: true,
-          gradeBand: true,
-          linkedTeam: {
-            select: {
-              id: true,
-              name: true
-            }
-          }
-        }
-      }),
+    const onboardingData = await getStudentOnboardingData(viewer.id);
+
+    if (
+      onboardingData &&
+      shouldForceStudentOnboarding({
+        role: viewer.role,
+        onboardingExperienceVersion: onboardingData.onboardingExperienceVersion,
+        hasSubmittedFirstProject: onboardingData.hasSubmittedFirstProject,
+        hasOpenProjectOrProposal: onboardingData.hasOpenProjectOrProposal
+      })
+    ) {
+      redirect("/start?tour=1");
+    }
+
+    const [missionControl, league] = await Promise.all([
       getStudentMissionControlData(viewer.id),
       getDashboardData()
     ]);
 
-    const isFirstTime =
-      !userRecord?.onboardingCompletedAt &&
-      missionControl.openProjects.length === 0 &&
-      missionControl.openProposals.length === 0;
-
-    if (isFirstTime) {
-      return (
-        <OnboardingWizard
-          missions={missionControl.missionCandidates}
-          markOnboardingComplete
-          linkedTeamName={userRecord?.linkedTeam?.name ?? null}
-          gradeBand={userRecord?.gradeBand ?? null}
-        />
-      );
-    }
-
     return (
       <StudentDashboard
         viewer={viewer}
-        linkedTeam={userRecord?.linkedTeam ?? null}
-        gradeBand={userRecord?.gradeBand ?? null}
+        linkedTeam={onboardingData?.linkedTeam ?? null}
+        gradeBand={onboardingData?.gradeBand ?? null}
         recommendedAction={missionControl.recommendedAction}
         recommendedMission={missionControl.recommendedMission}
         openProjects={missionControl.openProjects}

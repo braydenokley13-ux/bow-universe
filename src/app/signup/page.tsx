@@ -47,7 +47,7 @@ export default async function SignupPage({
         <SectionHeading
           eyebrow="Student signup"
           title="Create your own student account"
-          description="Use a class code from your teacher or commissioner, choose the section that fits your class, and get into your first project fast."
+          description="Use a class code from your teacher or commissioner, choose the section that fits your class, and then sign in to start the full universe tour."
         />
 
         <div className="panel p-6">

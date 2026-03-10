@@ -95,6 +95,22 @@ function appendBeginnerMode(href: string) {
   return `${pathname}?${params.toString()}`;
 }
 
+export function buildGuidedProjectHref(input: {
+  lane: LaneTag;
+  issueId: string;
+  teamId?: string | null;
+  supportingProposalId?: string | null;
+}) {
+  return appendBeginnerMode(
+    buildProjectStudioHref({
+      lane: input.lane,
+      issueId: input.issueId,
+      teamId: input.teamId ?? null,
+      supportingProposalId: input.supportingProposalId ?? null
+    })
+  );
+}
+
 function scoreMissionIssue(
   issue: MissionIssueInput,
   linkedTeamId: string | null | undefined,
@@ -194,15 +210,15 @@ export function buildRecommendedMissionCandidates(input: {
       });
       const teamId = issue.teamId ?? null;
       const supportingProposalId = issue.proposals[0]?.id ?? null;
-      const starterHref = appendBeginnerMode(
-        buildProjectStudioHref({
-          lane: suggestedLane,
-          issueId: issue.id,
-          teamId,
-          supportingProposalId:
-            suggestedLane === "POLICY_REFORM_ARCHITECTS" || supportingProposalId ? supportingProposalId : null
-        })
-      );
+      const starterHref = buildGuidedProjectHref({
+        lane: suggestedLane,
+        issueId: issue.id,
+        teamId,
+        supportingProposalId:
+          suggestedLane === "POLICY_REFORM_ARCHITECTS" || supportingProposalId
+            ? supportingProposalId
+            : null
+      });
 
       return {
         issue: {

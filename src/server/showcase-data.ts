@@ -9,6 +9,12 @@ import {
 import { buildNewsroomFeed } from "@/lib/news";
 import { prisma } from "@/lib/prisma";
 import {
+  CURRENT_STUDENT_ONBOARDING_VERSION,
+  parseStudentOnboardingProgress,
+  shouldForceStudentOnboarding,
+  type StudentOnboardingData
+} from "@/lib/student-onboarding";
+import {
   buildRecommendedMissionCandidates,
   buildRepairHref,
   hasStudentSubmittedProject
@@ -82,6 +88,170 @@ export async function getStudentExperienceState(userId: string) {
     onboardingCompletedAt: user?.onboardingCompletedAt ?? null,
     hasSubmittedFirstProject: hasStudentSubmittedProject(projects),
     currentProjectId: currentProject?.id ?? null
+  };
+}
+
+export async function getStudentOnboardingData(
+  userId: string
+): Promise<StudentOnboardingData | null> {
+  const [
+    user,
+    allStudentProjects,
+    allStudentProposals,
+    activeIssues,
+    newsCount,
+    teamCount,
+    glossaryCount,
+    openChallengesCount,
+    publicationCount
+  ] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        gradeBand: true,
+        onboardingCompletedAt: true,
+        onboardingExperienceVersion: true,
+        onboardingProgressJson: true,
+        linkedTeam: {
+          select: {
+            id: true,
+            name: true
+          }
+        }
+      }
+    }),
+    prisma.project.findMany({
+      where: {
+        createdByUserId: userId
+      },
+      select: {
+        submissionStatus: true,
+        issueId: true,
+        issueLinks: {
+          select: {
+            issueId: true
+          }
+        }
+      }
+    }),
+    prisma.proposal.findMany({
+      where: {
+        createdByUserId: userId
+      },
+      select: {
+        status: true,
+        issueId: true
+      }
+    }),
+    prisma.issue.findMany({
+      where: {
+        status: {
+          in: [IssueStatus.OPEN, IssueStatus.IN_REVIEW]
+        }
+      },
+      include: {
+        team: {
+          select: {
+            id: true,
+            name: true
+          }
+        },
+        proposals: {
+          select: {
+            id: true
+          },
+          orderBy: {
+            createdAt: "desc"
+          }
+        },
+        projectLinks: {
+          select: {
+            project: {
+              select: {
+                id: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: [{ severity: "desc" }, { updatedAt: "desc" }]
+    }),
+    prisma.newsPost.count(),
+    prisma.team.count(),
+    prisma.glossaryTerm.count(),
+    prisma.challenge.count({
+      where: {
+        startsAt: {
+          lte: new Date()
+        },
+        endsAt: {
+          gte: new Date()
+        }
+      }
+    }),
+    prisma.publication.count()
+  ]);
+
+  if (!user) {
+    return null;
+  }
+
+  const claimedIssueIds = Array.from(
+    new Set([
+      ...allStudentProjects.flatMap((project) => [
+        project.issueId ?? "",
+        ...project.issueLinks.map((link) => link.issueId)
+      ]),
+      ...allStudentProposals.map((proposal) => proposal.issueId)
+    ].filter(Boolean))
+  );
+  const missionCandidates = buildRecommendedMissionCandidates({
+    issues: activeIssues,
+    linkedTeamId: user.linkedTeam?.id ?? null,
+    claimedIssueIds
+  });
+  const hasSubmittedFirstProject = hasStudentSubmittedProject(allStudentProjects);
+  const hasOpenProjectOrProposal =
+    allStudentProjects.some((project) => openProjectStatuses.includes(project.submissionStatus)) ||
+    allStudentProposals.some((proposal) => openProposalStatuses.includes(proposal.status));
+  const forceOnboarding = shouldForceStudentOnboarding({
+    role: "STUDENT",
+    onboardingExperienceVersion: user.onboardingExperienceVersion,
+    hasSubmittedFirstProject,
+    hasOpenProjectOrProposal
+  });
+
+  return {
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email
+    },
+    linkedTeam: user.linkedTeam ?? null,
+    gradeBand: user.gradeBand ?? null,
+    onboardingCompletedAt: user.onboardingCompletedAt ?? null,
+    onboardingExperienceVersion: user.onboardingExperienceVersion,
+    progress: parseStudentOnboardingProgress(user.onboardingProgressJson),
+    hasSubmittedFirstProject,
+    hasOpenProjectOrProposal,
+    isRevisit:
+      !forceOnboarding &&
+      Boolean(
+        user.onboardingCompletedAt ||
+          user.onboardingExperienceVersion >= CURRENT_STUDENT_ONBOARDING_VERSION
+      ),
+    missionCandidates,
+    stats: {
+      newsCount,
+      openIssuesCount: activeIssues.length,
+      openChallengesCount,
+      publicationCount,
+      teamCount,
+      glossaryCount
+    }
   };
 }
 

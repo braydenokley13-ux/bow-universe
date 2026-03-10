@@ -33,8 +33,12 @@ import {
 import { buildProjectIssueLinkCreates, resolveProjectPrimaryIssueId } from "@/lib/project-issues";
 import { prisma } from "@/lib/prisma";
 import { parseRuleDiff } from "@/lib/rules";
+import {
+  CURRENT_STUDENT_ONBOARDING_VERSION,
+  studentOnboardingStepIds
+} from "@/lib/student-onboarding";
 import { hasStudentSubmittedProject } from "@/lib/student-flow";
-import type { ReferenceEntry } from "@/lib/types";
+import type { LaneTag, ReferenceEntry } from "@/lib/types";
 import { parseJsonText, parseStringList } from "@/lib/utils";
 import { requireAdmin, requireUser } from "@/server/auth";
 import { syncChallengeMilestonesForSource } from "@/server/challenges";
@@ -123,6 +127,12 @@ const studentActivationSchema = z
   });
 
 const studentAccountsAnchor = "#student-accounts";
+const onboardingLaneTags: LaneTag[] = [
+  "TOOL_BUILDERS",
+  "POLICY_REFORM_ARCHITECTS",
+  "STRATEGIC_OPERATORS",
+  "ECONOMIC_INVESTIGATORS"
+];
 
 function redirectToStudentAccounts(status: string): never {
   redirect(`/admin?studentAccount=${encodeURIComponent(status)}${studentAccountsAnchor}`);
@@ -628,14 +638,80 @@ async function saveProposalRecord(params: {
   };
 }
 
-export async function completeOnboardingAction(input?: { gradeBand?: GradeBand | null }) {
+export async function saveOnboardingProgressAction(input: {
+  step: string;
+  gradeBand?: GradeBand | null;
+  selectedMissionId?: string | null;
+  selectedLane?: LaneTag | null;
+}) {
   const viewer = await requireUser();
-  const gradeBand = input?.gradeBand ?? null;
+
+  if (viewer.role !== "STUDENT") {
+    return;
+  }
+
+  const step = studentOnboardingStepIds.includes(input.step as (typeof studentOnboardingStepIds)[number])
+    ? (input.step as (typeof studentOnboardingStepIds)[number])
+    : null;
+
+  if (!step) {
+    return;
+  }
+
+  const gradeBand =
+    input.gradeBand && Object.values(GradeBand).includes(input.gradeBand) ? input.gradeBand : null;
+  const selectedMissionId = input.selectedMissionId?.trim() || null;
+  const selectedLane =
+    input.selectedLane && onboardingLaneTags.includes(input.selectedLane)
+      ? input.selectedLane
+      : null;
+
   await prisma.user.update({
     where: { id: viewer.id },
     data: {
-      onboardingCompletedAt: new Date(),
-      ...(gradeBand ? { gradeBand } : {})
+      onboardingProgressJson: asJson({
+        currentStep: step,
+        selectedGradeBand: gradeBand,
+        selectedMissionId,
+        selectedLane
+      })
+    }
+  });
+
+  revalidatePath("/");
+  revalidatePath("/start");
+}
+
+export async function completeOnboardingAction(input?: {
+  gradeBand?: GradeBand | null;
+  onboardingVersion?: number | null;
+  selectedMissionId?: string | null;
+  selectedLane?: LaneTag | null;
+}) {
+  const viewer = await requireUser();
+  if (viewer.role !== "STUDENT") {
+    return;
+  }
+
+  const gradeBand = input?.gradeBand ?? null;
+  const onboardingVersion =
+    typeof input?.onboardingVersion === "number" && input.onboardingVersion > 0
+      ? input.onboardingVersion
+      : CURRENT_STUDENT_ONBOARDING_VERSION;
+  const currentUser = await prisma.user.findUnique({
+    where: { id: viewer.id },
+    select: {
+      onboardingCompletedAt: true
+    }
+  });
+
+  await prisma.user.update({
+    where: { id: viewer.id },
+    data: {
+      onboardingExperienceVersion: onboardingVersion,
+      onboardingProgressJson: Prisma.JsonNull,
+      ...(gradeBand && Object.values(GradeBand).includes(gradeBand) ? { gradeBand } : {}),
+      ...(!currentUser?.onboardingCompletedAt ? { onboardingCompletedAt: new Date() } : {})
     }
   });
   revalidatePath("/");

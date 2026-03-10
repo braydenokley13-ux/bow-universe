@@ -69,6 +69,7 @@ function uniqueNames() {
   names.add("Leo Marsh");
   names.add("Mika Torres");
   names.add("Nora James");
+  names.add("Taylor West");
 
   for (let index = 1; index <= 18; index += 1) {
     names.add(`Student Analyst ${index}`);
@@ -119,6 +120,10 @@ function proposalSeedStatus(status: ProposalStatus) {
 }
 
 function gradeBandForStudent(name: string) {
+  if (name === "Taylor West") {
+    return GradeBand.GRADE_5_6;
+  }
+
   const analystMatch = name.match(/^Student Analyst (\d+)$/);
 
   if (analystMatch) {
@@ -129,6 +134,10 @@ function gradeBandForStudent(name: string) {
 }
 
 function studentCompletedOnboarding(name: string) {
+  if (name === "Taylor West") {
+    return false;
+  }
+
   const analystMatch = name.match(/^Student Analyst (\d+)$/);
 
   if (!analystMatch) {
@@ -704,6 +713,15 @@ async function main() {
     });
   }
 
+  await prisma.user.update({
+    where: { id: userMap.get("Taylor West")! },
+    data: {
+      commissionerId,
+      linkedTeamId: teamIds.get("glass-harbor-tides")!,
+      gradeBand: GradeBand.GRADE_5_6
+    }
+  });
+
   await seedGlossaryTerms();
 
   for (const event of activityFeed) {
@@ -741,7 +759,8 @@ async function main() {
 
   console.log("Seeded BOW Universe.");
   console.log(`Commissioner login: commissioner@bow.local / ${defaultPassword}`);
-  console.log(`Student login: riya-patel@bow.local / ${defaultPassword}`);
+  console.log(`Returning student login: riya-patel@bow.local / ${defaultPassword}`);
+  console.log(`Fresh student login: taylor-west@bow.local / ${defaultPassword}`);
   console.log(`Class code: ${foundationsClassCode.code}`);
   console.log(`Class code: ${studioClassCode.code}`);
 }

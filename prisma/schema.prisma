@@ -129,6 +129,8 @@ model User {
   signedUpViaClassCodeId String?
   createdAt             DateTime               @default(now())
   onboardingCompletedAt DateTime?
+  onboardingExperienceVersion Int              @default(0)
+  onboardingProgressJson Json?
   linkedTeam            Team?                  @relation("LinkedStudentTeam", fields: [linkedTeamId], references: [id], onDelete: SetNull)
   commissioner          User?                  @relation("CommissionerLinkedStudents", fields: [commissionerId], references: [id], onDelete: SetNull)
   signedUpViaClassCode  ClassCode?             @relation("ClassCodeSignups", fields: [signedUpViaClassCodeId], references: [id], onDelete: SetNull)
