@@ -13,7 +13,7 @@ function signupNotice(status?: string) {
   }
 
   if (status === "code-expired") {
-    return "That class code expired. Ask your commissioner for a fresh one.";
+    return "That class code expired. Ask your teacher for a fresh one.";
   }
 
   if (status === "email-taken") {
@@ -47,7 +47,7 @@ export default async function SignupPage({
         <SectionHeading
           eyebrow="Student signup"
           title="Create your own student account"
-          description="Use a class code from your teacher or commissioner, choose the section that fits your class, and then sign in to start the full universe tour."
+          description="Use a class code from your teacher, choose the section that fits your class, and then sign in to start the full universe tour."
         />
 
         <div className="panel p-6">
@@ -58,7 +58,7 @@ export default async function SignupPage({
 
           <div className="mt-6 space-y-4 text-sm leading-6 text-ink/70">
             <div className="rounded-2xl border border-line bg-white/60 p-4">
-              1. A valid class code from your commissioner.
+              1. A valid class code from your teacher.
             </div>
             <div className="rounded-2xl border border-line bg-white/60 p-4">
               2. Your name, email, and a password with at least 8 characters.

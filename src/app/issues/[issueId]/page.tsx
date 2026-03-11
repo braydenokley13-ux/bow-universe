@@ -5,8 +5,9 @@ import ReactMarkdown from "react-markdown";
 import { Badge } from "@/components/badge";
 import { Breadcrumb } from "@/components/breadcrumb";
 import { NextActionCard } from "@/components/next-action-card";
+import { ResearchStageMap } from "@/components/research-stage-map";
 import { SectionHeading } from "@/components/section-heading";
-import { classifyIssueWorkGap } from "@/lib/discovery-guidance";
+import { buildIssueResearchPreview, classifyIssueWorkGap } from "@/lib/discovery-guidance";
 import { buildProjectStudioHref, buildProposalStudioHref } from "@/lib/studio-entry";
 import { parseIssueMetrics, getIssuePageData } from "@/server/data";
 
@@ -33,6 +34,16 @@ export default async function IssueDetailPage({ params }: { params: Promise<{ is
     proposals: issue.proposals,
     projectLinks: issue.projectLinks
   });
+  const researchPreview = buildIssueResearchPreview({
+    id: issue.id,
+    title: issue.title,
+    description: issue.description,
+    severity: issue.severity,
+    team: issue.team ? { name: issue.team.name } : null,
+    metrics,
+    proposals: issue.proposals,
+    projectLinks: issue.projectLinks
+  });
   const nextHref =
     gap.missing[0] === "proposal memo"
       ? buildProposalStudioHref({ issueId: issue.id })
@@ -51,6 +62,16 @@ export default async function IssueDetailPage({ params }: { params: Promise<{ is
     <div className="space-y-8">
       <Breadcrumb items={[{ label: "Home", href: "/" }, { label: "Issues", href: "/issues" }, { label: issue.title.length > 40 ? issue.title.slice(0, 40) + "…" : issue.title }]} />
       <SectionHeading eyebrow="Issue Detail" title={issue.title} description={issue.description} />
+      <ResearchStageMap
+        eyebrow="Research loop"
+        title="Turn this issue into a real investigation"
+        description="You do not need to solve everything at once. Move this issue through the same five research steps students use everywhere else."
+        steps={researchPreview.researchMap.researchStageProgress}
+        nextStep={researchPreview.researchMap.nextResearchStep}
+        compact
+        simulationPreviewAvailable={researchPreview.researchMap.simulationPreviewAvailable}
+        simulationPreviewLabel={researchPreview.modelPrompt}
+      />
 
       <section className="grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
         <div className="space-y-6">
@@ -80,6 +101,41 @@ export default async function IssueDetailPage({ params }: { params: Promise<{ is
             </div>
             <div className="mt-4 rounded-2xl border border-line bg-white/70 p-4 text-sm leading-6 text-ink/70">
               {gap.summary}
+            </div>
+          </section>
+
+          <section className="panel p-6">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h3 className="font-display text-2xl text-ink">Research game plan</h3>
+                <p className="mt-2 text-sm leading-6 text-ink/68">
+                  Use these four prompts to turn the issue into real sports-economics research instead of a vague classroom topic.
+                </p>
+              </div>
+              <Badge tone="success">Curiosity first</Badge>
+            </div>
+
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              <div className="rounded-2xl border border-line bg-white/70 p-4">
+                <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Ask this</p>
+                <p className="mt-3 text-sm leading-6 text-ink/68">{researchPreview.questionPrompt}</p>
+              </div>
+              <div className="rounded-2xl border border-line bg-white/70 p-4">
+                <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Look for</p>
+                <p className="mt-3 text-sm leading-6 text-ink/68">{researchPreview.evidencePrompt}</p>
+              </div>
+              <div className="rounded-2xl border border-line bg-white/70 p-4">
+                <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Test later</p>
+                <p className="mt-3 text-sm leading-6 text-ink/68">{researchPreview.modelPrompt}</p>
+              </div>
+              <div className="rounded-2xl border border-line bg-white/70 p-4">
+                <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Make the case</p>
+                <p className="mt-3 text-sm leading-6 text-ink/68">{researchPreview.argumentPrompt}</p>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-accent/20 bg-accent/5 p-4 text-sm leading-6 text-ink/72">
+              {researchPreview.whyInteresting}
             </div>
           </section>
 
@@ -126,6 +182,7 @@ export default async function IssueDetailPage({ params }: { params: Promise<{ is
 
         <div className="space-y-6">
           <NextActionCard
+            eyebrow="Best next research move"
             title="Recommended next action"
             body={
               gap.missing.length > 0

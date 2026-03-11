@@ -1,5 +1,8 @@
 import type { ReactNode } from "react";
 
+import { ResearchStageMap } from "@/components/research-stage-map";
+import type { ResearchStageNextStep, ResearchStageStep } from "@/lib/research-stage";
+
 type WizardShellProps = {
   progressTitle: string;
   progressDescription: string;
@@ -28,6 +31,14 @@ type WizardShellProps = {
     beginnerMode?: boolean;
     repairLabel?: string | null;
   };
+  researchMap?: {
+    title: string;
+    description: string;
+    steps: ResearchStageStep[];
+    nextStep?: ResearchStageNextStep | null;
+    simulationPreviewAvailable?: boolean;
+    simulationPreviewLabel?: string;
+  } | null;
   rail: ReactNode;
   children: ReactNode;
   footer: ReactNode;
@@ -72,6 +83,7 @@ export function WizardShell({
   currentStepName,
   issueCard,
   coachPanel,
+  researchMap = null,
   rail,
   children,
   footer
@@ -230,6 +242,19 @@ export function WizardShell({
           </div>
         ) : null}
       </section>
+
+      {researchMap ? (
+        <ResearchStageMap
+          eyebrow="Research loop"
+          title={researchMap.title}
+          description={researchMap.description}
+          steps={researchMap.steps}
+          nextStep={researchMap.nextStep ?? null}
+          compact
+          simulationPreviewAvailable={researchMap.simulationPreviewAvailable}
+          simulationPreviewLabel={researchMap.simulationPreviewLabel}
+        />
+      ) : null}
 
       <div className="grid gap-5 xl:grid-cols-[260px_minmax(0,1fr)]">
         <div className="xl:sticky xl:top-20 xl:self-start">{rail}</div>

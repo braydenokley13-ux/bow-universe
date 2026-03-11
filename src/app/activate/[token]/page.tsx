@@ -19,14 +19,14 @@ function activationMessage(status?: string) {
   if (status === "used") {
     return {
       tone: "warn" as const,
-      text: "That activation link has already been used. Ask the commissioner for a new one if needed."
+      text: "That activation link has already been used. Ask your teacher for a new one if needed."
     };
   }
 
   if (status === "expired") {
     return {
       tone: "warn" as const,
-      text: "That activation link has expired. Ask the commissioner to create a fresh one."
+      text: "That activation link has expired. Ask your teacher to create a fresh one."
     };
   }
 
@@ -87,7 +87,7 @@ export default async function ActivateStudentPage({
         <SectionHeading
           eyebrow="Student access"
           title="Activation link not found"
-          description="This link is not valid anymore. Ask the commissioner to create a fresh student activation link."
+          description="This link is not valid anymore. Ask your teacher to create a fresh student activation link."
         />
         <div className="panel p-6">
           <Link
@@ -159,7 +159,7 @@ export default async function ActivateStudentPage({
           </div>
         ) : isExpired ? (
           <div className="mt-6 rounded-2xl border border-warn/30 bg-warn/10 px-4 py-4 text-sm text-warn">
-            This link expired before it was used. Ask the commissioner to create a new student invite.
+            This link expired before it was used. Ask your teacher to create a new student invite.
           </div>
         ) : (
           <StudentActivationForm

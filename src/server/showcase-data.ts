@@ -11,6 +11,13 @@ import {
 import { buildNewsroomFeed } from "@/lib/news";
 import { prisma } from "@/lib/prisma";
 import {
+  buildStudentResearchProgress,
+  deriveProjectResearchSignals,
+  deriveProposalResearchSignals,
+  deriveResearchMilestones,
+  getResearchStageMeta
+} from "@/lib/research-stage";
+import {
   parseStudentOutcomeProof,
   projectQualifiesForEvidenceOutcome,
   proposalQualifiesForEvidenceOutcome,
@@ -30,6 +37,7 @@ import {
   buildRepairHref,
   hasStudentSubmittedProject
 } from "@/lib/student-flow";
+import type { LaneTag } from "@/lib/types";
 import { buildChallengeLeaderboard, challengeIsOpen } from "@/server/challenges";
 import { syncStudentOutcomesForUser, syncStudentOutcomesForUsers } from "@/server/student-outcomes";
 
@@ -74,8 +82,43 @@ function daysSince(date: Date, now: Date) {
   return Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
 }
 
+function buildStudentResearchSummary(input: {
+  projects: Array<{
+    title: string;
+    summary: string;
+    essentialQuestion?: string | null;
+    methodsSummary?: string | null;
+    findingsMd?: string | null;
+    lanePrimary?: LaneTag | null;
+    contentJson: unknown;
+    referencesJson: unknown;
+    publicationSlug?: string | null;
+    submissionStatus?: SubmissionStatus | null;
+  }>;
+  proposals: Array<{
+    title: string;
+    methodsSummary?: string | null;
+    issueId?: string | null;
+    contentJson: unknown;
+    referencesJson: unknown;
+    sandboxResultJson?: unknown;
+    status?: ProposalStatus | null;
+  }>;
+  publishedCount?: number;
+  nextStep?: Partial<Record<import("@/lib/research-stage").ResearchStage, string>>;
+  forceSimulationPreview?: boolean;
+}) {
+  return buildStudentResearchProgress({
+    projectSignals: input.projects.map((project) => deriveProjectResearchSignals(project)),
+    proposalSignals: input.proposals.map((proposal) => deriveProposalResearchSignals(proposal)),
+    publishedCount: input.publishedCount,
+    nextStep: input.nextStep,
+    forceSimulationPreview: input.forceSimulationPreview
+  });
+}
+
 export async function getStudentExperienceState(userId: string) {
-  const [user, projects] = await Promise.all([
+  const [user, projects, proposals] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -87,7 +130,31 @@ export async function getStudentExperienceState(userId: string) {
       where: { createdByUserId: userId },
       select: {
         id: true,
+        title: true,
+        summary: true,
+        essentialQuestion: true,
+        methodsSummary: true,
+        findingsMd: true,
+        lanePrimary: true,
+        contentJson: true,
+        referencesJson: true,
+        publicationSlug: true,
         submissionStatus: true,
+        updatedAt: true
+      },
+      orderBy: { updatedAt: "desc" }
+    }),
+    prisma.proposal.findMany({
+      where: { createdByUserId: userId },
+      select: {
+        id: true,
+        title: true,
+        methodsSummary: true,
+        issueId: true,
+        contentJson: true,
+        referencesJson: true,
+        sandboxResultJson: true,
+        status: true,
         updatedAt: true
       },
       orderBy: { updatedAt: "desc" }
@@ -98,12 +165,21 @@ export async function getStudentExperienceState(userId: string) {
     projects.find((project) =>
       openProjectStatuses.includes(project.submissionStatus)
     ) ?? null;
+  const researchProgress = buildStudentResearchSummary({
+    projects,
+    proposals,
+    forceSimulationPreview: true
+  });
 
   return {
     gradeBand: user?.gradeBand ?? null,
     onboardingCompletedAt: user?.onboardingCompletedAt ?? null,
     hasSubmittedFirstProject: hasStudentSubmittedProject(projects),
-    currentProjectId: currentProject?.id ?? null
+    currentProjectId: currentProject?.id ?? null,
+    currentResearchStage: researchProgress.currentResearchStage,
+    nextResearchStep: researchProgress.nextResearchStep,
+    researchStageProgress: researchProgress.researchStageProgress,
+    simulationPreviewAvailable: researchProgress.simulationPreviewAvailable
   };
 }
 
@@ -520,7 +596,15 @@ export async function getAdminShowcaseData() {
           select: {
             id: true,
             title: true,
+            summary: true,
             createdByUserId: true,
+            essentialQuestion: true,
+            methodsSummary: true,
+            findingsMd: true,
+            lanePrimary: true,
+            contentJson: true,
+            referencesJson: true,
+            publicationSlug: true,
             submissionStatus: true,
             issueId: true,
             updatedAt: true,
@@ -555,6 +639,10 @@ export async function getAdminShowcaseData() {
             id: true,
             title: true,
             createdByUserId: true,
+            methodsSummary: true,
+            contentJson: true,
+            referencesJson: true,
+            sandboxResultJson: true,
             status: true,
             issueId: true,
             updatedAt: true,
@@ -700,6 +788,8 @@ export async function getAdminShowcaseData() {
       interventionLabel: string;
       interventionHref: string;
       interventionBody: string;
+      researchStageLabel: string;
+      nextResearchStep: string;
     }>,
     stalledDrafts: [] as Array<{
       studentId: string;
@@ -710,6 +800,8 @@ export async function getAdminShowcaseData() {
       interventionLabel: string;
       interventionHref: string;
       interventionBody: string;
+      researchStageLabel: string;
+      nextResearchStep: string;
     }>,
     revisionWaiting: [] as Array<{
       studentId: string;
@@ -720,12 +812,20 @@ export async function getAdminShowcaseData() {
       interventionLabel: string;
       interventionHref: string;
       interventionBody: string;
+      researchStageLabel: string;
+      nextResearchStep: string;
     }>
   };
 
   for (const student of students) {
     const projects = projectsByStudent.get(student.id) ?? [];
     const proposals = proposalsByStudent.get(student.id) ?? [];
+    const researchProgress = buildStudentResearchSummary({
+      projects,
+      proposals,
+      forceSimulationPreview: true
+    });
+    const researchStageLabel = getResearchStageMeta(researchProgress.currentResearchStage).label;
     const claimedIssueIds = Array.from(
       new Set([
         ...projects.flatMap((project) => [
@@ -753,7 +853,9 @@ export async function getAdminShowcaseData() {
         interventionHref: recommendedMission?.adminHref ?? "/issues",
         interventionBody: recommendedMission
           ? recommendedMission.issue.title
-          : "Browse live issues and pick a low-friction starting point."
+          : "Browse live issues and pick a low-friction starting point.",
+        researchStageLabel,
+        nextResearchStep: researchProgress.nextResearchStep.detail
       });
     }
 
@@ -785,7 +887,9 @@ export async function getAdminShowcaseData() {
         daysWaiting: daysSince(latestDraft.updatedAt, now),
         interventionLabel: "Open latest draft",
         interventionHref: latestDraft.href,
-        interventionBody: latestDraft.label
+        interventionBody: latestDraft.label,
+        researchStageLabel,
+        nextResearchStep: researchProgress.nextResearchStep.detail
       });
     }
 
@@ -843,7 +947,9 @@ export async function getAdminShowcaseData() {
         daysWaiting: revisionCandidates[0].daysWaiting,
         interventionLabel: "Open latest feedback target",
         interventionHref: revisionCandidates[0].href,
-        interventionBody: revisionCandidates[0].label
+        interventionBody: revisionCandidates[0].label,
+        researchStageLabel,
+        nextResearchStep: researchProgress.nextResearchStep.detail
       });
     }
   }
@@ -1052,6 +1158,15 @@ export async function getStudentMissionControlData(userId: string) {
         },
         select: {
           id: true,
+          title: true,
+          summary: true,
+          essentialQuestion: true,
+          methodsSummary: true,
+          findingsMd: true,
+          lanePrimary: true,
+          contentJson: true,
+          referencesJson: true,
+          publicationSlug: true,
           submissionStatus: true,
           issueId: true,
           issueLinks: {
@@ -1067,7 +1182,14 @@ export async function getStudentMissionControlData(userId: string) {
         },
         select: {
           id: true,
+          title: true,
+          methodsSummary: true,
           issueId: true
+          ,
+          contentJson: true,
+          referencesJson: true,
+          sandboxResultJson: true,
+          status: true
         }
       })
     ]);
@@ -1125,6 +1247,16 @@ export async function getStudentMissionControlData(userId: string) {
   });
   const recommendedMission = missionCandidates[0] ?? null;
   const submittedFirstProject = hasStudentSubmittedProject(allStudentProjects);
+  const researchProgress = buildStudentResearchSummary({
+    projects: allStudentProjects,
+    proposals: allStudentProposals,
+    nextStep: recommendedMission
+      ? {
+          ASK_QUESTION: `Start with ${recommendedMission.issue.title}, then write the cleanest question you want to answer.`
+        }
+      : undefined,
+    forceSimulationPreview: true
+  });
 
   const recentWork = [
     ...openProjects.map((project) => ({
@@ -1133,7 +1265,7 @@ export async function getStudentMissionControlData(userId: string) {
       title: project.title,
       updatedAt: project.updatedAt,
       href: projectHref(project.id),
-      reason: project.submissionStatus === "REVISION_REQUESTED" ? "Commissioner requested changes." : "This is your most recent open project."
+      reason: project.submissionStatus === "REVISION_REQUESTED" ? "Your teacher asked for another revision pass." : "This is your most recent open project."
     })),
     ...openProposals.map((proposal) => ({
       id: proposal.id,
@@ -1201,6 +1333,10 @@ export async function getStudentMissionControlData(userId: string) {
     recommendedAction,
     recommendedMission,
     missionCandidates,
+    currentResearchStage: researchProgress.currentResearchStage,
+    nextResearchStep: researchProgress.nextResearchStep,
+    researchStageProgress: researchProgress.researchStageProgress,
+    simulationPreviewAvailable: researchProgress.simulationPreviewAvailable,
     submittedFirstProject,
     openProjects,
     openProposals,
@@ -1334,6 +1470,58 @@ export async function getStudentPortfolioData(userId: string) {
     existing.push(outcome);
     outcomesBySource.set(key, existing);
   }
+  const projectResearchSignals = projects.map((project) => ({
+    project,
+    signals: deriveProjectResearchSignals(project)
+  }));
+  const proposalResearchSignals = proposals.map((proposal) => ({
+    proposal,
+    signals: deriveProposalResearchSignals(proposal)
+  }));
+  const researchProgress = buildStudentResearchSummary({
+    projects,
+    proposals,
+    publishedCount: publications.length,
+    forceSimulationPreview: true
+  });
+  const researchMilestones = deriveResearchMilestones({
+    questionSources: [
+      ...projectResearchSignals
+        .filter((entry) => entry.signals.ASK_QUESTION)
+        .map((entry) => ({ label: entry.project.title, createdAt: entry.project.updatedAt })),
+      ...proposalResearchSignals
+        .filter((entry) => entry.signals.ASK_QUESTION)
+        .map((entry) => ({ label: entry.proposal.title, createdAt: entry.proposal.updatedAt }))
+    ],
+    evidenceSources: [
+      ...projectResearchSignals
+        .filter((entry) => entry.signals.FIND_EVIDENCE)
+        .map((entry) => ({ label: entry.project.title, createdAt: entry.project.updatedAt })),
+      ...proposalResearchSignals
+        .filter((entry) => entry.signals.FIND_EVIDENCE)
+        .map((entry) => ({ label: entry.proposal.title, createdAt: entry.proposal.updatedAt }))
+    ],
+    modelSources: [
+      ...projectResearchSignals
+        .filter((entry) => entry.signals.TEST_SYSTEM)
+        .map((entry) => ({ label: entry.project.title, createdAt: entry.project.updatedAt })),
+      ...proposalResearchSignals
+        .filter((entry) => entry.signals.TEST_SYSTEM)
+        .map((entry) => ({ label: entry.proposal.title, createdAt: entry.proposal.updatedAt }))
+    ],
+    argumentSources: [
+      ...projectResearchSignals
+        .filter((entry) => entry.signals.MAKE_CASE)
+        .map((entry) => ({ label: entry.project.title, createdAt: entry.project.updatedAt })),
+      ...proposalResearchSignals
+        .filter((entry) => entry.signals.MAKE_CASE)
+        .map((entry) => ({ label: entry.proposal.title, createdAt: entry.proposal.updatedAt }))
+    ],
+    publicationSources: publications.map((publication) => ({
+      label: publication.title,
+      createdAt: publication.publishedAt
+    }))
+  });
 
   const outcomes = [
     ...projects.map((project) => {
@@ -1486,6 +1674,11 @@ export async function getStudentPortfolioData(userId: string) {
     user,
     projects,
     proposals,
+    currentResearchStage: researchProgress.currentResearchStage,
+    nextResearchStep: researchProgress.nextResearchStep,
+    researchStageProgress: researchProgress.researchStageProgress,
+    simulationPreviewAvailable: researchProgress.simulationPreviewAvailable,
+    researchMilestones,
     publications,
     spotlightPosts,
     challengeEntries: challengeEntries.map((entry) => ({

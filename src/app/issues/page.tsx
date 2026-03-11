@@ -1,8 +1,10 @@
 import Link from "next/link";
 
 import { Badge } from "@/components/badge";
+import { ResearchStageMap } from "@/components/research-stage-map";
 import { SectionHeading } from "@/components/section-heading";
-import { classifyIssueWorkGap, summarizeIssuesFilter } from "@/lib/discovery-guidance";
+import { buildIssueResearchPreview, classifyIssueWorkGap, summarizeIssuesFilter } from "@/lib/discovery-guidance";
+import { buildResearchStageDisplay } from "@/lib/research-stage";
 import { buildProjectStudioHref, buildProposalStudioHref } from "@/lib/studio-entry";
 import { parseIssueMetrics, getIssuesPageData } from "@/server/data";
 
@@ -23,6 +25,10 @@ export default async function IssuesPage({
 }) {
   const issues = await getIssuesPageData();
   const resolvedSearchParams = (await searchParams) ?? {};
+  const issuesResearchMap = buildResearchStageDisplay("ASK_QUESTION", {
+    previewStages: ["TEST_SYSTEM"],
+    nextStepDetail: "Pick one issue card, then turn the pressure into one question you can actually investigate."
+  });
   const statuses = ["ALL", "OPEN", "IN_REVIEW", "RESOLVED"] as const;
   const severityBands = ["ALL", "4", "3", "2", "1"] as const;
   const selectedStatus = resolvedSearchParams.status ?? "ALL";
@@ -66,6 +72,17 @@ export default async function IssuesPage({
         </div>
       </section>
 
+      <ResearchStageMap
+        eyebrow="Research loop"
+        title="How to use the issues board"
+        description="A strong issue gives you four things fast: a question to ask, evidence to hunt for, a system test to preview, and a case you could eventually make."
+        steps={issuesResearchMap.researchStageProgress}
+        nextStep={issuesResearchMap.nextResearchStep}
+        compact
+        simulationPreviewAvailable={issuesResearchMap.simulationPreviewAvailable}
+        simulationPreviewLabel="You do not need full sandbox tools yet. First notice what part of the system this issue would be interesting to test later."
+      />
+
       <section className="space-y-4">
         {filteredIssues.length === 0 ? (
           <div className="panel p-8 text-center">
@@ -73,7 +90,7 @@ export default async function IssuesPage({
             <p className="mt-3 text-sm leading-6 text-ink/68">
               {selectedStatus !== "ALL" || selectedSeverity !== "ALL"
                 ? "No issues match those filters. Try clearing them to see the full board."
-                : "The commissioner will post problems here for you to investigate. Come back soon."}
+                : "Your teacher will post live league problems here for you to investigate. Come back soon."}
             </p>
             <div className="mt-5 flex flex-wrap justify-center gap-3">
               {selectedStatus !== "ALL" || selectedSeverity !== "ALL" ? (
@@ -98,6 +115,16 @@ export default async function IssuesPage({
           const gap = classifyIssueWorkGap({
             id: issue.id,
             title: issue.title,
+            proposals: issue.proposals,
+            projectLinks: issue.projectLinks
+          });
+          const preview = buildIssueResearchPreview({
+            id: issue.id,
+            title: issue.title,
+            description: issue.description,
+            severity: issue.severity,
+            team: issue.team ? { name: issue.team.name } : null,
+            metrics,
             proposals: issue.proposals,
             projectLinks: issue.projectLinks
           });
@@ -137,6 +164,25 @@ export default async function IssuesPage({
                 <div className="rounded-2xl border border-line bg-white/60 p-4">
                   <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Small vs big</p>
                   <p className="mt-2 text-sm text-ink/75">{metrics.smallVsBigCompetitiveness ?? "-"}</p>
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-2xl border border-line bg-white/60 p-4">
+                  <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Ask this</p>
+                  <p className="mt-3 text-sm leading-6 text-ink/68">{preview.questionPrompt}</p>
+                </div>
+                <div className="rounded-2xl border border-line bg-white/60 p-4">
+                  <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Look for</p>
+                  <p className="mt-3 text-sm leading-6 text-ink/68">{preview.evidencePrompt}</p>
+                </div>
+                <div className="rounded-2xl border border-line bg-white/60 p-4">
+                  <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Test later</p>
+                  <p className="mt-3 text-sm leading-6 text-ink/68">{preview.modelPrompt}</p>
+                </div>
+                <div className="rounded-2xl border border-line bg-white/60 p-4">
+                  <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Why this is fun</p>
+                  <p className="mt-3 text-sm leading-6 text-ink/68">{preview.whyInteresting}</p>
                 </div>
               </div>
 

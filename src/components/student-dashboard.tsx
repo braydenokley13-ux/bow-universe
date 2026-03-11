@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { ResearchStageMap } from "@/components/research-stage-map";
+import type { ResearchStageNextStep, ResearchStageStep } from "@/lib/research-stage";
 import type { RecommendedMission } from "@/lib/student-flow";
 import type { LaneTag } from "@/lib/types";
 import { laneTagLabels, submissionStatusLabels } from "@/lib/types";
@@ -100,6 +102,9 @@ type StudentDashboardProps = {
   challengeEntries: ChallengeEntryCard[];
   spotlightPosts: SpotlightPost[];
   submittedFirstProject: boolean;
+  researchStageProgress: ResearchStageStep[];
+  nextResearchStep: ResearchStageNextStep;
+  simulationPreviewAvailable: boolean;
   league: LeagueMetrics;
 };
 
@@ -136,6 +141,9 @@ export function StudentDashboard({
   challengeEntries,
   spotlightPosts,
   submittedFirstProject,
+  researchStageProgress,
+  nextResearchStep,
+  simulationPreviewAvailable,
   league
 }: StudentDashboardProps) {
   const totalOpen = openProjects.length + openProposals.length;
@@ -200,6 +208,25 @@ export function StudentDashboard({
         </article>
       </section>
 
+      <ResearchStageMap
+        eyebrow="Research loop"
+        title={submittedFirstProject ? "Keep your research moving" : "How your first research cycle works"}
+        description={
+          submittedFirstProject
+            ? "Good work keeps moving through the same five steps: question, evidence, system test, case, and share. This map shows where your work needs the next push."
+            : "BOW Universe is most fun when you can see the research game clearly: ask one real question, find evidence, preview the system, make a case, and then share the work."
+        }
+        steps={researchStageProgress}
+        nextStep={nextResearchStep}
+        compact
+        simulationPreviewAvailable={simulationPreviewAvailable}
+        simulationPreviewLabel={
+          submittedFirstProject
+            ? "You do not need to open every advanced tool now. Keep collecting evidence, then test the system when the question is strong enough."
+            : "You do not need the full sandbox first. Start by understanding one issue, then preview how the system could shift later."
+        }
+      />
+
       {isYoungerTrack ? (
         <section className="panel p-6">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -215,8 +242,8 @@ export function StudentDashboard({
           <div className="mt-6 grid gap-4 md:grid-cols-3">
             {[
               "1. Pick one live issue instead of opening every page.",
-              "2. Finish the guided project before worrying about proposals or challenges.",
-              "3. Use the feedback and portfolio pages only after your first draft is moving."
+              "2. Finish the guided research steps before worrying about proposals or challenges.",
+              "3. Use the portfolio to notice growth after your first draft is moving."
             ].map((item) => (
               <div key={item} className="rounded-2xl border border-line bg-white/60 p-4 text-sm leading-6 text-ink/68">
                 {item}

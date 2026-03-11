@@ -197,7 +197,7 @@ export function StudentOutcomeLedger({ outcomes, pendingVerificationCount, submi
                   </form>
                 ) : evidenceState?.status === "PENDING_VERIFICATION" ? (
                   <div className="mt-5 rounded-2xl border border-line bg-amber-50/70 px-4 py-4 text-sm leading-6 text-ink/70">
-                    Your evidence proof is waiting for teacher or commissioner review.
+                    Your evidence proof is waiting for teacher review.
                   </div>
                 ) : null}
               </article>

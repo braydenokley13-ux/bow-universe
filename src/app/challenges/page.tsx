@@ -24,7 +24,7 @@ export default async function ChallengesPage() {
         <SectionHeading
           eyebrow="Challenges"
           title="Competitive research without arcade nonsense"
-          description="Challenges reward real milestones: joining strong work, submitting it, improving it, publishing it, and earning commissioner spotlight."
+          description="Challenges are a later layer on top of the core research loop. They reward real milestones after strong work is already moving."
         />
 
         <StudentFeatureGate
@@ -43,7 +43,7 @@ export default async function ChallengesPage() {
       <SectionHeading
         eyebrow="Challenges"
         title="Competitive research without arcade nonsense"
-        description="Challenges reward real milestones: joining strong work, submitting it, improving it, publishing it, and earning commissioner spotlight."
+        description="Challenges stay secondary to the core work. Use them to add energy after the question, evidence, and argument are already getting stronger."
       />
 
       <section className="grid gap-4 xl:grid-cols-2">

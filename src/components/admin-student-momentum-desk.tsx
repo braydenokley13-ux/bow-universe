@@ -11,6 +11,8 @@ type MomentumEntry = {
   interventionLabel: string;
   interventionHref: string;
   interventionBody: string;
+  researchStageLabel: string;
+  nextResearchStep: string;
 };
 
 type AdminStudentMomentumDeskProps = {
@@ -58,6 +60,13 @@ function renderBucket(
                 </Link>
               </div>
               <p className="mt-3 text-sm leading-6 text-ink/70">{entry.reason}</p>
+              <div className="mt-3 rounded-2xl border border-line bg-white/75 px-4 py-3">
+                <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-accent">
+                  Current research step
+                </p>
+                <p className="mt-2 font-medium text-ink">{entry.researchStageLabel}</p>
+                <p className="mt-2 text-sm leading-6 text-ink/68">{entry.nextResearchStep}</p>
+              </div>
               <p className="mt-3 text-sm text-ink/62">{entry.interventionBody}</p>
             </div>
           ))

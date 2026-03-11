@@ -2,6 +2,7 @@ import { ProposalStatus, SubmissionStatus, UserRole } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 
 import {
+  buildIssueResearchPreview,
   buildDashboardGuidance,
   classifyIssueWorkGap,
   getLanePrompt,
@@ -58,5 +59,27 @@ describe("discovery guidance", () => {
     expect(getLanePrompt("TOOL_BUILDERS")).toContain("tool");
     expect(getProposalStageNote(ProposalStatus.DRAFT, false)).toBe("Missing sandbox evidence");
     expect(getProposalStageNote(ProposalStatus.VOTING, true)).toBe("In voting");
+  });
+
+  it("builds issue research prompts that keep modeling visible", () => {
+    const preview = buildIssueResearchPreview({
+      id: "issue-1",
+      title: "Revenue sharing pressure",
+      description: "A live league issue about tax pressure and fairness.",
+      severity: 5,
+      metrics: {
+        revenueInequality: 1.8,
+        taxConcentration: 0.7
+      },
+      team: null,
+      proposals: [],
+      projectLinks: []
+    });
+
+    expect(preview.questionPrompt).toContain("league");
+    expect(preview.evidencePrompt).toContain("revenue inequality");
+    expect(preview.modelPrompt).toContain("test");
+    expect(preview.researchMap.currentResearchStage).toBe("ASK_QUESTION");
+    expect(preview.researchMap.researchStageProgress[2]?.status).toBe("preview");
   });
 });

@@ -95,6 +95,9 @@ export default async function HomePage() {
         challengeEntries={missionControl.challengeEntries}
         spotlightPosts={missionControl.spotlightPosts}
         submittedFirstProject={missionControl.submittedFirstProject}
+        researchStageProgress={missionControl.researchStageProgress}
+        nextResearchStep={missionControl.nextResearchStep}
+        simulationPreviewAvailable={missionControl.simulationPreviewAvailable}
         league={league}
       />
     );

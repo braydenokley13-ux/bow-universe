@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { Badge } from "@/components/badge";
+import { ResearchStageMap } from "@/components/research-stage-map";
 import { SectionHeading } from "@/components/section-heading";
 import { StudentOutcomeLedger } from "@/components/student-outcome-ledger";
 import { StudentProgressStrip } from "@/components/student-progress-strip";
@@ -65,6 +66,53 @@ export default async function StudentPortfolioPage({
           </div>
         </section>
       ) : null}
+
+      <ResearchStageMap
+        eyebrow="Research loop"
+        title="How your research is growing"
+        description="This portfolio should show more than finished tasks. It should show how your questions, evidence, system testing, arguments, and published work are getting stronger over time."
+        steps={portfolio.researchStageProgress}
+        nextStep={portfolio.nextResearchStep}
+        compact
+        simulationPreviewAvailable={portfolio.simulationPreviewAvailable}
+        simulationPreviewLabel="The system-test step stays visible here so students can see when their research starts moving from observation into modeling."
+      />
+
+      <section className="panel p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Research milestones</p>
+            <h3 className="mt-3 font-display text-2xl text-ink">The first time each step became real</h3>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-ink/70">
+              These milestones help students and teachers see where the research journey actually changed shape.
+            </p>
+          </div>
+          <Badge tone="success">
+            {portfolio.researchMilestones.filter((milestone) => milestone.achieved).length} reached
+          </Badge>
+        </div>
+
+        <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          {portfolio.researchMilestones.map((milestone) => (
+            <article key={milestone.stage} className="rounded-2xl border border-line bg-white/65 p-4">
+              <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-accent">{milestone.label}</p>
+              <p className="mt-3 text-sm leading-6 text-ink/68">{milestone.description}</p>
+              {milestone.achieved ? (
+                <div className="mt-4 rounded-2xl border border-success/25 bg-success/10 px-3 py-3 text-sm leading-6 text-success">
+                  <p className="font-medium">{milestone.sourceLabel}</p>
+                  <p className="mt-1 text-success/90">
+                    {milestone.createdAt?.toLocaleDateString("en-US")}
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-4 rounded-2xl border border-dashed border-line px-3 py-3 text-sm leading-6 text-ink/55">
+                  Not reached yet.
+                </div>
+              )}
+            </article>
+          ))}
+        </div>
+      </section>
 
       <StudentProgressStrip outcomeStats={portfolio.outcomeStats} />
 
@@ -230,7 +278,7 @@ export default async function StudentPortfolioPage({
               ))
             ) : (
               <div className="rounded-2xl border border-dashed border-line px-4 py-6 text-sm text-ink/60">
-                No commissioner spotlight has been linked to your work yet.
+                No teacher spotlight or league note has been linked to your work yet.
               </div>
             )}
           </div>

@@ -16,6 +16,7 @@ import {
   ProjectStepPublish,
   ProjectStepReview
 } from "@/components/project-coach-steps";
+import { BeginnerEvidenceWizard } from "@/components/beginner-evidence-wizard";
 import { WizardFooter } from "@/components/wizard-footer";
 import { WizardShell } from "@/components/wizard-shell";
 import { WizardStepRail } from "@/components/wizard-step-rail";
@@ -33,6 +34,7 @@ import {
   getPublicationDisplayLabel,
   projectTypeToPublicationType
 } from "@/lib/publications";
+import { buildResearchStageDisplay, type ResearchStage } from "@/lib/research-stage";
 import {
   artifactLinksToText,
   assessProjectCoach,
@@ -62,7 +64,15 @@ type ProjectStudioFormProps = {
   action: (formData: FormData) => void | Promise<void>;
   viewerId: string;
   viewerRole: "STUDENT" | "ADMIN";
-  issues: Array<{ id: string; title: string; description: string; severity: number }>;
+  issues: Array<{
+    id: string;
+    slug: string;
+    title: string;
+    description: string;
+    severity: number;
+    metricsJson: unknown;
+    evidenceMd: string | null;
+  }>;
   teams: Array<{ id: string; name: string }>;
   users: Array<{ id: string; name: string }>;
   proposals: Array<{ id: string; title: string; issue: { title: string } }>;
@@ -226,6 +236,38 @@ function replaceStepUrl(pathname: string, searchParams: string, stepId: string) 
   const nextUrl = `${pathname}?${params.toString()}`;
 
   window.history.replaceState(window.history.state, "", nextUrl);
+}
+
+function beginnerStepToResearchStage(stepId: BeginnerProjectStepId): ResearchStage {
+  if (["issue", "lane", "question"].includes(stepId)) {
+    return "ASK_QUESTION";
+  }
+
+  if (["context", "evidence"].includes(stepId)) {
+    return "FIND_EVIDENCE";
+  }
+
+  if (["analysis", "recommendations"].includes(stepId)) {
+    return "MAKE_CASE";
+  }
+
+  return "SHARE_WORK";
+}
+
+function projectStepToResearchStage(stepId: ProjectCoachStepId): ResearchStage {
+  if (["lane", "context", "opening", "mission"].includes(stepId)) {
+    return "ASK_QUESTION";
+  }
+
+  if (stepId === "body") {
+    return "FIND_EVIDENCE";
+  }
+
+  if (stepId === "laneSections" || stepId === "review") {
+    return "MAKE_CASE";
+  }
+
+  return "SHARE_WORK";
 }
 
 export function ProjectStudioForm({
@@ -1321,20 +1363,13 @@ export function ProjectStudioForm({
         );
       case "evidence":
         return (
-          <article className="panel p-6">
-            <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Step 5</p>
-            <h3 className="mt-3 font-display text-3xl text-ink">What evidence do you have?</h3>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-ink/70">
-              Add the facts, examples, notes, numbers, or comparisons that support the project.
-            </p>
-            <textarea
-              id={getProjectCoachDomId("evidence")}
-              value={values.evidence}
-              onChange={(event) => updateField("evidence", event.target.value)}
-              placeholder="List the clearest evidence you have so far."
-              className="mt-6 min-h-[220px] w-full rounded-[24px] border border-line bg-white/80 px-4 py-4 text-base text-ink outline-none transition focus:border-accent"
-            />
-          </article>
+          <BeginnerEvidenceWizard
+            selectedIssue={selectedIssue}
+            evidence={values.evidence}
+            references={values.references}
+            onChangeEvidence={(value) => updateField("evidence", value)}
+            onChangeReferences={(value) => updateField("references", value)}
+          />
         );
       case "analysis":
         return (
@@ -1586,6 +1621,26 @@ export function ProjectStudioForm({
           onAction: jumpToIssueStep
         }
       : null;
+  const beginnerResearchMap = buildResearchStageDisplay(beginnerStepToResearchStage(currentBeginnerStepId), {
+    completedStages: [
+      effectiveValues.issueId.trim() && effectiveValues.essentialQuestion.trim().length >= 8 ? "ASK_QUESTION" : null,
+      (effectiveValues.evidence.trim().length >= 16 || effectiveValues.references.trim().length > 0) ? "FIND_EVIDENCE" : null,
+      (effectiveValues.analysis.trim().length >= 16 || effectiveValues.recommendations.trim().length >= 12) ? "MAKE_CASE" : null,
+      (effectiveValues.title.trim().length >= 6 || effectiveValues.publicationSlug.trim().length > 0) ? "SHARE_WORK" : null
+    ].filter(Boolean) as ResearchStage[],
+    previewStages: ["TEST_SYSTEM"],
+    nextStepDetail: `${beginnerCurrentContent.nextMove} Keep the model step in mind as a later system test, not as today's blocker.`
+  });
+  const fullResearchMap = buildResearchStageDisplay(projectStepToResearchStage(currentStepId), {
+    completedStages: [
+      (effectiveValues.issueId.trim().length > 0 && effectiveValues.essentialQuestion.trim().length >= 8) ? "ASK_QUESTION" : null,
+      (effectiveValues.evidence.trim().length >= 16 || effectiveValues.references.trim().length > 0) ? "FIND_EVIDENCE" : null,
+      (effectiveValues.analysis.trim().length >= 16 || effectiveValues.recommendations.trim().length >= 12) ? "MAKE_CASE" : null,
+      (effectiveValues.publicationSlug.trim().length > 0 || effectiveValues.title.trim().length >= 6) ? "SHARE_WORK" : null
+    ].filter(Boolean) as ResearchStage[],
+    previewStages: ["TEST_SYSTEM"],
+    nextStepDetail: `${currentStepEvaluation.nextMove} Keep an eye on what part of the league system you could test once the draft is stronger.`
+  });
 
   return (
     <form
@@ -1622,6 +1677,16 @@ export function ProjectStudioForm({
               beginnerMissingItems.length === 0 ? beginnerCurrentContent.celebrationNote : null,
             beginnerMode: true,
             repairLabel: repairTarget?.label ?? null
+          }}
+          researchMap={{
+            title: "Where this step sits in the research loop",
+            description:
+              "Even in the first guide, you are doing real research: ask the question, gather evidence, preview the system, make the case, and share the work.",
+            steps: beginnerResearchMap.researchStageProgress,
+            nextStep: beginnerResearchMap.nextResearchStep,
+            simulationPreviewAvailable: beginnerResearchMap.simulationPreviewAvailable,
+            simulationPreviewLabel:
+              "You do not need the full sandbox first. Notice what part of the league system you would want to test later once the question and evidence are clearer."
           }}
           rail={<WizardStepRail items={beginnerRailItems} onSelect={selectBeginnerStep} />}
           footer={
@@ -1663,6 +1728,16 @@ export function ProjectStudioForm({
             strongExample: currentStep.strongExample,
             beginnerMode,
             repairLabel: repairTarget?.label ?? null
+          }}
+          researchMap={{
+            title: "Keep the research loop visible",
+            description:
+              "This coach is still part of the same five-step loop. The form fields change, but the work stays rooted in question, evidence, system test, case, and share.",
+            steps: fullResearchMap.researchStageProgress,
+            nextStep: fullResearchMap.nextResearchStep,
+            simulationPreviewAvailable: fullResearchMap.simulationPreviewAvailable,
+            simulationPreviewLabel:
+              "As this draft gets stronger, notice what you would want to test in the league system next. Deeper sandbox work can come later."
           }}
           rail={<WizardStepRail items={railItems} onSelect={selectFromRail} />}
           footer={
