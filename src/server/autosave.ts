@@ -1,11 +1,27 @@
-import { ProjectType, ProposalStatus, PublicationType, SubmissionStatus } from "@prisma/client";
+import {
+  ProjectArtifactFocus,
+  ProjectDeliverableKey,
+  ProjectMilestoneKey,
+  ProjectScale,
+  ProjectType,
+  ProposalStatus,
+  PublicationType,
+  SubmissionStatus
+} from "@prisma/client";
 import { Prisma } from "@prisma/client";
 
+import {
+  buildProjectCampaignAssessment,
+  getArtifactFocusForProjectType,
+  getLaneForArtifactFocus,
+  getProjectTypeForArtifactFocus
+} from "@/lib/project-campaign";
 import { getPrimaryLaneTag, projectTypeToPublicationType } from "@/lib/publications";
 import { buildProjectIssueLinkCreates, resolveProjectPrimaryIssueId } from "@/lib/project-issues";
 import { prisma } from "@/lib/prisma";
 import type { LaneTag, ReferenceEntry } from "@/lib/types";
 import { parseJsonText, parseStringList } from "@/lib/utils";
+import { syncProjectCampaignState } from "@/server/project-campaign";
 import { syncProjectStudentOutcomes, syncProposalStudentOutcomes } from "@/server/student-outcomes";
 
 function asJson(value: unknown): Prisma.InputJsonValue {
@@ -67,6 +83,25 @@ function parseProjectType(value: string | null | undefined) {
   return value as ProjectType;
 }
 
+function parseProjectScale(
+  value: string | null | undefined,
+  fallback: ProjectScale = ProjectScale.FIRST_PROJECT
+) {
+  if (!value || !Object.values(ProjectScale).includes(value as ProjectScale)) {
+    return fallback;
+  }
+
+  return value as ProjectScale;
+}
+
+function parseArtifactFocus(value: string | null | undefined, fallbackProjectType: ProjectType) {
+  if (value && Object.values(ProjectArtifactFocus).includes(value as ProjectArtifactFocus)) {
+    return value as ProjectArtifactFocus;
+  }
+
+  return getArtifactFocusForProjectType(fallbackProjectType);
+}
+
 function parseLanePrimary(value: string | null | undefined, projectType: ProjectType, laneTags: string[]) {
   const validLane = value as LaneTag | undefined;
   if (
@@ -77,6 +112,44 @@ function parseLanePrimary(value: string | null | undefined, projectType: Project
   }
 
   return getPrimaryLaneTag(laneTags as LaneTag[], projectType);
+}
+
+function parseOptionalDate(value: FormDataEntryValue | null) {
+  if (!value || typeof value !== "string" || value.trim().length === 0) {
+    return null;
+  }
+
+  return new Date(value);
+}
+
+function parseCampaignDeliverables(formData: FormData) {
+  return Object.values(ProjectDeliverableKey).map((key) => ({
+    key,
+    contentMd: String(formData.get(`deliverableContent_${key}`) ?? "").trim(),
+    artifactUrl: String(formData.get(`deliverableArtifactUrl_${key}`) ?? "").trim() || null
+  }));
+}
+
+function parseCampaignMilestones(formData: FormData) {
+  return Object.values(ProjectMilestoneKey)
+    .map((key) => {
+      const targetDate = parseOptionalDate(formData.get(`milestoneTargetDate_${key}`));
+
+      if (!targetDate) {
+        return null;
+      }
+
+      return {
+        key,
+        targetDate,
+        completionNote: String(formData.get(`milestoneCompletionNote_${key}`) ?? "").trim() || null
+      };
+    })
+    .filter(Boolean) as Array<{
+    key: ProjectMilestoneKey;
+    targetDate: Date;
+    completionNote: string | null;
+  }>;
 }
 
 function parseProjectContent(formData: FormData, summary: string, essentialQuestion: string) {
@@ -111,7 +184,12 @@ export async function autosaveProjectDraft(params: {
         where: { id: projectId },
         include: {
           issueLinks: true,
-          collaborators: true
+          collaborators: true,
+          _count: {
+            select: {
+              feedbackEntries: true
+            }
+          }
         }
       })
     : null;
@@ -121,8 +199,29 @@ export async function autosaveProjectDraft(params: {
   }
 
   const projectType = parseProjectType(String(params.formData.get("projectType") ?? ""));
-  const laneTags = Array.from(new Set(params.formData.getAll("laneTags").map(String).filter(Boolean)));
-  const lanePrimary = parseLanePrimary(String(params.formData.get("lanePrimary") ?? ""), projectType, laneTags);
+  const requestedScale = parseProjectScale(
+    String(params.formData.get("projectScale") ?? ""),
+    existing?.scale ?? ProjectScale.FIRST_PROJECT
+  );
+  const projectScale =
+    String(params.formData.get("beginnerMode") ?? "") === "1" ? ProjectScale.FIRST_PROJECT : requestedScale;
+  const artifactFocus = projectScale === ProjectScale.EXTENDED
+    ? parseArtifactFocus(String(params.formData.get("artifactFocus") ?? ""), projectType)
+    : null;
+  const effectiveProjectType =
+    artifactFocus && projectScale === ProjectScale.EXTENDED
+      ? getProjectTypeForArtifactFocus(artifactFocus)
+      : projectType;
+  const laneTags = Array.from(
+    new Set(
+      projectScale === ProjectScale.EXTENDED
+        ? [getLaneForArtifactFocus(artifactFocus ?? getArtifactFocusForProjectType(projectType))]
+        : params.formData.getAll("laneTags").map(String).filter(Boolean)
+    )
+  );
+  const lanePrimary = artifactFocus && projectScale === ProjectScale.EXTENDED
+    ? getLaneForArtifactFocus(artifactFocus)
+    : parseLanePrimary(String(params.formData.get("lanePrimary") ?? ""), effectiveProjectType, laneTags);
   const finalLaneTags = Array.from(new Set([...laneTags, lanePrimary]));
   const issueId = resolveProjectPrimaryIssueId({
     issueId: String(params.formData.get("issueId") ?? ""),
@@ -145,8 +244,13 @@ export async function autosaveProjectDraft(params: {
   const references = parseReferences(parseStringList(params.formData.get("references")));
   const keywords = parseKeywords(params.formData.get("keywords"));
   const keyTakeaways = parseTakeaways(params.formData.get("keyTakeaways"));
+  const missionGoal = String(params.formData.get("missionGoal") ?? "").trim() || null;
+  const successCriteria = String(params.formData.get("successCriteria") ?? "").trim() || null;
+  const targetLaunchDate = parseOptionalDate(params.formData.get("targetLaunchDate"));
+  const campaignDeliverables = parseCampaignDeliverables(params.formData);
+  const campaignMilestones = parseCampaignMilestones(params.formData);
   const findingsMd = String(params.formData.get("findingsMd") ?? "").trim() || existing?.findingsMd || "";
-  const publicationType = projectTypeToPublicationType(projectType, lanePrimary);
+  const publicationType = projectTypeToPublicationType(effectiveProjectType, lanePrimary);
 
   const saved = existing
     ? await prisma.project.update({
@@ -157,7 +261,9 @@ export async function autosaveProjectDraft(params: {
           abstract,
           essentialQuestion,
           methodsSummary,
-          projectType,
+          projectType: effectiveProjectType,
+          scale: projectScale,
+          artifactFocus,
           submissionStatus: SubmissionStatus.DRAFT,
           publicationType,
           lanePrimary,
@@ -165,6 +271,9 @@ export async function autosaveProjectDraft(params: {
           issueId: issueId || null,
           teamId: String(params.formData.get("teamId") ?? "").trim() || null,
           supportingProposalId: String(params.formData.get("supportingProposalId") ?? "").trim() || null,
+          missionGoal,
+          successCriteria,
+          targetLaunchDate,
           artifactLinksJson: asJson(artifactLinks),
           findingsMd,
           contentJson: asJson(content),
@@ -190,7 +299,9 @@ export async function autosaveProjectDraft(params: {
           abstract,
           essentialQuestion,
           methodsSummary,
-          projectType,
+          projectType: effectiveProjectType,
+          scale: projectScale,
+          artifactFocus,
           submissionStatus: SubmissionStatus.DRAFT,
           publicationType,
           lanePrimary,
@@ -198,6 +309,9 @@ export async function autosaveProjectDraft(params: {
           issueId: issueId || null,
           teamId: String(params.formData.get("teamId") ?? "").trim() || null,
           supportingProposalId: String(params.formData.get("supportingProposalId") ?? "").trim() || null,
+          missionGoal,
+          successCriteria,
+          targetLaunchDate,
           artifactLinksJson: asJson(artifactLinks),
           findingsMd,
           contentJson: asJson(content),
@@ -215,6 +329,39 @@ export async function autosaveProjectDraft(params: {
           }
         }
       });
+
+  await syncProjectCampaignState({
+    db: prisma,
+    projectId: saved.id,
+    scale: projectScale,
+    assessment: buildProjectCampaignAssessment({
+      scale: projectScale,
+      artifactFocus,
+      issueId,
+      issueSeverity: null,
+      title,
+      summary,
+      abstract,
+      essentialQuestion,
+      methodsSummary,
+      overview: content.overview,
+      context: content.context,
+      evidence: content.evidence,
+      analysis: content.analysis,
+      recommendations: content.recommendations,
+      reflection: content.reflection,
+      missionGoal: missionGoal ?? "",
+      successCriteria: successCriteria ?? "",
+      targetLaunchDate,
+      keyTakeaways,
+      artifactLinks,
+      references,
+      laneSections: content.laneSections,
+      feedbackCount: existing?._count.feedbackEntries ?? 0,
+      milestoneInputs: campaignMilestones,
+      deliverableInputs: campaignDeliverables
+    })
+  });
 
   await syncProjectStudentOutcomes({
     projectId: saved.id

@@ -11,6 +11,10 @@ import {
   IssueStatus,
   Prisma,
   PublicationSourceType,
+  ProjectArtifactFocus,
+  ProjectDeliverableKey,
+  ProjectMilestoneKey,
+  ProjectScale,
   ProjectType,
   ProposalStatus,
   SubmissionStatus,
@@ -21,6 +25,13 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
+import {
+  buildProjectCampaignAssessment,
+  getArtifactFocusForProjectType,
+  getCampaignMilestoneForSectionKey,
+  getLaneForArtifactFocus,
+  getProjectTypeForArtifactFocus
+} from "@/lib/project-campaign";
 import {
   buildExternalReadinessChecklist,
   buildProjectChecklist,
@@ -43,6 +54,11 @@ import type { LaneTag, ReferenceEntry } from "@/lib/types";
 import { parseJsonText, parseStringList } from "@/lib/utils";
 import { requireAdmin, requireUser } from "@/server/auth";
 import { syncChallengeMilestonesForSource } from "@/server/challenges";
+import { parseProjectJson } from "@/server/data";
+import {
+  createProjectCampaignFeedbackEvent,
+  syncProjectCampaignState
+} from "@/server/project-campaign";
 import {
   snapshotProjectRevision,
   snapshotProposalRevision,
@@ -209,6 +225,62 @@ function parseOptionalDate(value: FormDataEntryValue | null) {
   return new Date(value);
 }
 
+function parseProjectScale(
+  value: FormDataEntryValue | null | undefined,
+  fallback: ProjectScale = ProjectScale.FIRST_PROJECT
+) {
+  if (!value || typeof value !== "string" || !Object.values(ProjectScale).includes(value as ProjectScale)) {
+    return fallback;
+  }
+
+  return value as ProjectScale;
+}
+
+function parseArtifactFocus(
+  value: FormDataEntryValue | null | undefined,
+  fallbackProjectType: ProjectType
+) {
+  if (
+    value &&
+    typeof value === "string" &&
+    Object.values(ProjectArtifactFocus).includes(value as ProjectArtifactFocus)
+  ) {
+    return value as ProjectArtifactFocus;
+  }
+
+  return getArtifactFocusForProjectType(fallbackProjectType);
+}
+
+function parseCampaignDeliverables(formData: FormData) {
+  return Object.values(ProjectDeliverableKey).map((key) => ({
+    key,
+    contentMd: String(formData.get(`deliverableContent_${key}`) ?? "").trim(),
+    artifactUrl: String(formData.get(`deliverableArtifactUrl_${key}`) ?? "").trim() || null
+  }));
+}
+
+function parseCampaignMilestones(formData: FormData) {
+  return Object.values(ProjectMilestoneKey)
+    .map((key) => {
+      const targetDate = parseOptionalDate(formData.get(`milestoneTargetDate_${key}`));
+
+      if (!targetDate) {
+        return null;
+      }
+
+      return {
+        key,
+        targetDate,
+        completionNote: String(formData.get(`milestoneCompletionNote_${key}`) ?? "").trim() || null
+      };
+    })
+    .filter(Boolean) as Array<{
+    key: ProjectMilestoneKey;
+    targetDate: Date;
+    completionNote: string | null;
+  }>;
+}
+
 function normalizeSubmissionTimestamps(status: SubmissionStatus, previous?: SubmissionStatus) {
   const now = new Date();
 
@@ -315,7 +387,12 @@ async function saveProjectRecord(params: {
         where: { id: params.projectId },
         include: {
           issueLinks: true,
-          collaborators: true
+          collaborators: true,
+          _count: {
+            select: {
+              feedbackEntries: true
+            }
+          }
         }
       })
     : null;
@@ -325,19 +402,47 @@ async function saveProjectRecord(params: {
   }
 
   const intent = String(params.formData.get("intent") ?? "DRAFT");
+  const requestedScale = parseProjectScale(
+    params.formData.get("projectScale"),
+    existing?.scale ?? ProjectScale.FIRST_PROJECT
+  );
+  const projectScale =
+    String(params.formData.get("beginnerMode") ?? "") === "1" ? ProjectScale.FIRST_PROJECT : requestedScale;
   const issueId = resolveProjectPrimaryIssueId({
     issueId: String(params.formData.get("issueId") ?? ""),
     issueIds: params.formData.getAll("issueIds").map(String).filter(Boolean)
   });
   const collaboratorIds = params.formData.getAll("collaboratorIds").map(String).filter(Boolean);
-  const lanePrimary = parsed.lanePrimary as Parameters<typeof getPrimaryLaneTag>[0][number];
-  const laneTags = Array.from(new Set([...params.formData.getAll("laneTags").map(String).filter(Boolean), lanePrimary]));
+  const requestedArtifactFocus = parseArtifactFocus(
+    params.formData.get("artifactFocus"),
+    parsed.projectType
+  );
+  const artifactFocus = projectScale === ProjectScale.EXTENDED ? requestedArtifactFocus : null;
+  const effectiveProjectType =
+    artifactFocus && projectScale === ProjectScale.EXTENDED
+      ? getProjectTypeForArtifactFocus(artifactFocus)
+      : parsed.projectType;
+  const lanePrimary = artifactFocus && projectScale === ProjectScale.EXTENDED
+    ? getLaneForArtifactFocus(artifactFocus)
+    : (parsed.lanePrimary as Parameters<typeof getPrimaryLaneTag>[0][number]);
+  const laneTags = Array.from(
+    new Set(
+      projectScale === ProjectScale.EXTENDED
+        ? [lanePrimary]
+        : [...params.formData.getAll("laneTags").map(String).filter(Boolean), lanePrimary]
+    )
+  );
   const teamId = String(params.formData.get("teamId") ?? "").trim() || null;
   const supportingProposalId = String(params.formData.get("supportingProposalId") ?? "").trim() || null;
+  const missionGoal = String(params.formData.get("missionGoal") ?? "").trim() || null;
+  const successCriteria = String(params.formData.get("successCriteria") ?? "").trim() || null;
+  const targetLaunchDate = parseOptionalDate(params.formData.get("targetLaunchDate"));
   const artifactLinks = parseArtifactLinks(parseStringList(params.formData.get("artifactLinks")));
   const references = parseReferences(parseStringList(params.formData.get("references")));
   const keywords = parseKeywords(params.formData.get("keywords"));
   const keyTakeaways = parseTakeaways(params.formData.get("keyTakeaways"));
+  const campaignDeliverables = parseCampaignDeliverables(params.formData);
+  const campaignMilestones = parseCampaignMilestones(params.formData);
   const laneSectionKeys = parseStringList(params.formData.get("laneSectionKeys"));
   const overview = String(params.formData.get("overview") ?? parsed.summary).trim();
   const context = String(params.formData.get("context") ?? "").trim();
@@ -361,7 +466,7 @@ async function saveProjectRecord(params: {
     artifacts: artifactLinks,
     reflection
   };
-  const publicationType = projectTypeToPublicationType(parsed.projectType, lanePrimary);
+  const publicationType = projectTypeToPublicationType(effectiveProjectType, lanePrimary);
   const submissionStatus = getSuggestedProjectStatus(intent);
   const checklist = buildProjectChecklist(
     {
@@ -410,7 +515,9 @@ async function saveProjectRecord(params: {
           abstract: parsed.abstract,
           essentialQuestion: parsed.essentialQuestion,
           methodsSummary: parsed.methodsSummary,
-          projectType: parsed.projectType,
+          projectType: effectiveProjectType,
+          scale: projectScale,
+          artifactFocus,
           submissionStatus,
           publicationType,
           lanePrimary,
@@ -425,6 +532,9 @@ async function saveProjectRecord(params: {
           keyTakeawaysJson: asJson(keyTakeaways),
           referencesJson: asJson(references),
           keywordsJson: asJson(keywords),
+          missionGoal,
+          successCriteria,
+          targetLaunchDate,
           publicationSummary: overview,
           publicationSlug:
             String(params.formData.get("publicationSlug") ?? "").trim() ||
@@ -451,7 +561,9 @@ async function saveProjectRecord(params: {
           abstract: parsed.abstract,
           essentialQuestion: parsed.essentialQuestion,
           methodsSummary: parsed.methodsSummary,
-          projectType: parsed.projectType,
+          projectType: effectiveProjectType,
+          scale: projectScale,
+          artifactFocus,
           submissionStatus,
           publicationType,
           lanePrimary,
@@ -466,6 +578,9 @@ async function saveProjectRecord(params: {
           keyTakeawaysJson: asJson(keyTakeaways),
           referencesJson: asJson(references),
           keywordsJson: asJson(keywords),
+          missionGoal,
+          successCriteria,
+          targetLaunchDate,
           publicationSummary: overview,
           publicationSlug: String(params.formData.get("publicationSlug") ?? "").trim() || null,
           publicationVersion: 1,
@@ -481,6 +596,39 @@ async function saveProjectRecord(params: {
           }
         }
       });
+
+  await syncProjectCampaignState({
+    db: prisma,
+    projectId: project.id,
+    scale: projectScale,
+    assessment: buildProjectCampaignAssessment({
+      scale: projectScale,
+      artifactFocus,
+      issueId,
+      issueSeverity: null,
+      title: parsed.title,
+      summary: parsed.summary,
+      abstract: parsed.abstract,
+      essentialQuestion: parsed.essentialQuestion,
+      methodsSummary: parsed.methodsSummary,
+      overview,
+      context,
+      evidence,
+      analysis,
+      recommendations,
+      reflection,
+      missionGoal: missionGoal ?? "",
+      successCriteria: successCriteria ?? "",
+      targetLaunchDate,
+      keyTakeaways,
+      artifactLinks,
+      references,
+      laneSections: content.laneSections,
+      feedbackCount: existing?._count.feedbackEntries ?? 0,
+      milestoneInputs: campaignMilestones,
+      deliverableInputs: campaignDeliverables
+    })
+  });
 
   await syncProjectPublication({
     projectId: project.id,
@@ -990,7 +1138,42 @@ export async function saveProjectFeedbackAction(formData: FormData) {
     }
   });
 
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    include: {
+      feedbackEntries: {
+        select: {
+          id: true
+        }
+      },
+      milestones: {
+        orderBy: { targetDate: "asc" }
+      },
+      deliverables: true
+    }
+  });
+
+  if (project?.scale === ProjectScale.EXTENDED) {
+    const parsed = parseProjectJson(project);
+    const milestoneKey = getCampaignMilestoneForSectionKey(sectionKey);
+
+    await createProjectCampaignFeedbackEvent({
+      db: prisma,
+      projectId,
+      milestoneKey,
+      body
+    });
+
+    await syncProjectCampaignState({
+      db: prisma,
+      projectId,
+      scale: project.scale,
+      assessment: parsed.campaign
+    });
+  }
+
   revalidatePath(`/projects/${projectId}`);
+  revalidatePath(`/projects/${projectId}/edit`);
 }
 
 export async function saveProposalFeedbackAction(formData: FormData) {

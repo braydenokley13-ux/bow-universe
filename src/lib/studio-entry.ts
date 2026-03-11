@@ -6,7 +6,6 @@ export type StudioSearchParams = Record<string, SearchParamValue>;
 
 const VALID_LANES: LaneTag[] = [
   "TOOL_BUILDERS",
-  "POLICY_REFORM_ARCHITECTS",
   "STRATEGIC_OPERATORS",
   "ECONOMIC_INVESTIGATORS"
 ];

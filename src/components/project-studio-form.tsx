@@ -4,7 +4,13 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
-import { ProjectType } from "@prisma/client";
+import {
+  ProjectArtifactFocus,
+  ProjectDeliverableKey,
+  ProjectMilestoneKey,
+  ProjectScale,
+  ProjectType
+} from "@prisma/client";
 
 import {
   ProjectStepBody,
@@ -30,6 +36,17 @@ import {
   type BeginnerProjectStepId
 } from "@/lib/beginner-project";
 import {
+  buildDefaultProjectMilestones,
+  buildProjectCampaignAssessment,
+  getArtifactFocusForProjectType,
+  getLaneForArtifactFocus,
+  getProjectTypeForArtifactFocus,
+  projectArtifactFocusLabels,
+  type ProjectCampaignAssessment,
+  type ProjectCampaignDeliverableInput,
+  type ProjectCampaignMilestoneInput
+} from "@/lib/project-campaign";
+import {
   getLaneTemplate,
   getPublicationDisplayLabel,
   projectTypeToPublicationType
@@ -51,6 +68,7 @@ import {
   type ProjectCoachStepId,
   type ProjectCoachValues
 } from "@/lib/project-wizard";
+import type { CoachStepStatus } from "@/lib/coach-ui";
 import {
   laneTagLabels,
   type ArtifactLink,
@@ -78,6 +96,13 @@ type ProjectStudioFormProps = {
   proposals: Array<{ id: string; title: string; issue: { title: string } }>;
   initial?: {
     id?: string;
+    projectScale: ProjectScale;
+    artifactFocus: ProjectArtifactFocus | null;
+    missionGoal: string;
+    successCriteria: string;
+    targetLaunchDate: Date | null;
+    milestones: ProjectCampaignMilestoneInput[];
+    deliverables: ProjectCampaignDeliverableInput[];
     title: string;
     summary: string;
     abstract: string;
@@ -119,7 +144,22 @@ type AutosaveState = {
   message: string;
 };
 
-function buildProjectFormData(values: ProjectCoachValues, draftId: string) {
+type CampaignMilestoneDraftMap = Record<ProjectMilestoneKey, { targetDate: string; completionNote: string }>;
+type CampaignDeliverableDraftMap = Record<ProjectDeliverableKey, { contentMd: string; artifactUrl: string }>;
+
+function buildProjectFormData(
+  values: ProjectCoachValues,
+  draftId: string,
+  campaignState?: {
+    projectScale: ProjectScale;
+    artifactFocus: ProjectArtifactFocus | null;
+    missionGoal: string;
+    successCriteria: string;
+    targetLaunchDate: string;
+    milestoneDrafts: CampaignMilestoneDraftMap;
+    deliverableDrafts: CampaignDeliverableDraftMap;
+  }
+) {
   const formData = new FormData();
 
   if (draftId) {
@@ -133,6 +173,11 @@ function buildProjectFormData(values: ProjectCoachValues, draftId: string) {
   formData.set("methodsSummary", values.methodsSummary);
   formData.set("projectType", values.projectType);
   formData.set("lanePrimary", values.lanePrimary);
+  formData.set("projectScale", campaignState?.projectScale ?? ProjectScale.FIRST_PROJECT);
+  formData.set("artifactFocus", campaignState?.artifactFocus ?? "");
+  formData.set("missionGoal", campaignState?.missionGoal ?? "");
+  formData.set("successCriteria", campaignState?.successCriteria ?? "");
+  formData.set("targetLaunchDate", campaignState?.targetLaunchDate ?? "");
   formData.set("teamId", values.teamId);
   formData.set("supportingProposalId", values.supportingProposalId);
   formData.set("artifactLinks", values.artifactLinks);
@@ -165,10 +210,85 @@ function buildProjectFormData(values: ProjectCoachValues, draftId: string) {
     formData.set(`laneSectionValue_${section.key}`, section.value);
   }
 
+  if (campaignState) {
+    for (const key of Object.values(ProjectMilestoneKey)) {
+      formData.set(`milestoneTargetDate_${key}`, campaignState.milestoneDrafts[key]?.targetDate ?? "");
+      formData.set(
+        `milestoneCompletionNote_${key}`,
+        campaignState.milestoneDrafts[key]?.completionNote ?? ""
+      );
+    }
+
+    for (const key of Object.values(ProjectDeliverableKey)) {
+      formData.set(`deliverableContent_${key}`, campaignState.deliverableDrafts[key]?.contentMd ?? "");
+      formData.set(
+        `deliverableArtifactUrl_${key}`,
+        campaignState.deliverableDrafts[key]?.artifactUrl ?? ""
+      );
+    }
+  }
+
   return formData;
 }
 
-function hasAnyDraftContent(values: ProjectCoachValues) {
+function formatDateInput(value: Date | string | null | undefined) {
+  if (!value) {
+    return "";
+  }
+
+  const date = typeof value === "string" ? new Date(value) : value;
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return date.toISOString().slice(0, 10);
+}
+
+function buildInitialMilestoneDrafts(
+  initial?: ProjectStudioFormProps["initial"]
+): CampaignMilestoneDraftMap {
+  const defaults = buildDefaultProjectMilestones();
+  return Object.fromEntries(
+    Object.values(ProjectMilestoneKey).map((key) => {
+      const existing = initial?.milestones.find((milestone) => milestone.key === key);
+      const fallback = defaults.find((milestone) => milestone.key === key);
+
+      return [
+        key,
+        {
+          targetDate: formatDateInput(existing?.targetDate ?? fallback?.targetDate ?? null),
+          completionNote: existing?.completionNote ?? ""
+        }
+      ];
+    })
+  ) as CampaignMilestoneDraftMap;
+}
+
+function buildInitialDeliverableDrafts(
+  initial?: ProjectStudioFormProps["initial"]
+): CampaignDeliverableDraftMap {
+  return Object.fromEntries(
+    Object.values(ProjectDeliverableKey).map((key) => {
+      const existing = initial?.deliverables.find((deliverable) => deliverable.key === key);
+      return [
+        key,
+        {
+          contentMd: existing?.contentMd ?? "",
+          artifactUrl: existing?.artifactUrl ?? ""
+        }
+      ];
+    })
+  ) as CampaignDeliverableDraftMap;
+}
+
+function hasAnyDraftContent(
+  values: ProjectCoachValues,
+  campaignState?: {
+    missionGoal: string;
+    successCriteria: string;
+    deliverableDrafts: CampaignDeliverableDraftMap;
+  }
+) {
   return (
     values.title.trim().length > 0 ||
     values.summary.trim().length > 0 ||
@@ -181,7 +301,12 @@ function hasAnyDraftContent(values: ProjectCoachValues) {
     values.recommendations.trim().length > 0 ||
     values.references.trim().length > 0 ||
     values.artifactLinks.trim().length > 0 ||
-    values.laneSections.some((section) => section.value.trim().length > 0)
+    values.laneSections.some((section) => section.value.trim().length > 0) ||
+    Boolean(campaignState?.missionGoal.trim()) ||
+    Boolean(campaignState?.successCriteria.trim()) ||
+    Object.values(campaignState?.deliverableDrafts ?? {}).some(
+      (draft) => draft.contentMd.trim().length > 0 || draft.artifactUrl.trim().length > 0
+    )
   );
 }
 
@@ -218,6 +343,12 @@ function readProjectStepFromQuery(stepParam: string | null) {
 function readBeginnerStepFromQuery(stepParam: string | null) {
   return beginnerProjectStepOrder.includes(stepParam as BeginnerProjectStepId)
     ? (stepParam as BeginnerProjectStepId)
+    : null;
+}
+
+function readCampaignStepFromQuery(stepParam: string | null) {
+  return Object.values(ProjectMilestoneKey).includes(stepParam as ProjectMilestoneKey)
+    ? (stepParam as ProjectMilestoneKey)
     : null;
 }
 
@@ -264,6 +395,22 @@ function projectStepToResearchStage(stepId: ProjectCoachStepId): ResearchStage {
   }
 
   if (stepId === "laneSections" || stepId === "review") {
+    return "MAKE_CASE";
+  }
+
+  return "SHARE_WORK";
+}
+
+function campaignMilestoneToResearchStage(stepId: ProjectMilestoneKey): ResearchStage {
+  if (stepId === ProjectMilestoneKey.CHARTER) {
+    return "ASK_QUESTION";
+  }
+
+  if (stepId === ProjectMilestoneKey.EVIDENCE_BOARD) {
+    return "FIND_EVIDENCE";
+  }
+
+  if (stepId === ProjectMilestoneKey.BUILD_SPRINT || stepId === ProjectMilestoneKey.FEEDBACK_LOOP) {
     return "MAKE_CASE";
   }
 
@@ -338,6 +485,31 @@ export function ProjectStudioForm({
       laneSections: createInitialLaneSectionStore(defaultLane, initial?.laneSections)[defaultLane]
     })
   );
+  const [projectScale] = useState<ProjectScale>(
+    initial?.projectScale ?? (beginnerMode ? ProjectScale.FIRST_PROJECT : ProjectScale.EXTENDED)
+  );
+  const [artifactFocus, setArtifactFocus] = useState<ProjectArtifactFocus>(
+    initial?.artifactFocus ??
+      getArtifactFocusForProjectType(
+        initial?.projectType ??
+          (defaultLane === "TOOL_BUILDERS"
+            ? ProjectType.TOOL
+            : defaultLane === "STRATEGIC_OPERATORS"
+              ? ProjectType.STRATEGY
+              : ProjectType.INVESTIGATION)
+      )
+  );
+  const [missionGoal, setMissionGoal] = useState(initial?.missionGoal ?? "");
+  const [successCriteria, setSuccessCriteria] = useState(initial?.successCriteria ?? "");
+  const [targetLaunchDate, setTargetLaunchDate] = useState(
+    initial?.targetLaunchDate ? formatDateInput(initial.targetLaunchDate) : formatDateInput(buildDefaultProjectMilestones()[4]?.targetDate)
+  );
+  const [milestoneDrafts, setMilestoneDrafts] = useState<CampaignMilestoneDraftMap>(() =>
+    buildInitialMilestoneDrafts(initial)
+  );
+  const [deliverableDrafts, setDeliverableDrafts] = useState<CampaignDeliverableDraftMap>(() =>
+    buildInitialDeliverableDrafts(initial)
+  );
   const [autosaveState, setAutosaveState] = useState<AutosaveState>({
     tone: "idle",
     message: initial?.id ? "Draft loaded." : "Autosave starts after you begin writing."
@@ -348,8 +520,33 @@ export function ProjectStudioForm({
     abstract: Boolean(initial?.abstract),
     methodsSummary: Boolean(initial?.methodsSummary)
   });
+  const extendedProject = !beginnerMode && projectScale === ProjectScale.EXTENDED;
   const issueRequired = viewerRole === "STUDENT";
   const selectedIssue = issues.find((issue) => issue.id === values.issueId) ?? null;
+  useEffect(() => {
+    if (!extendedProject) {
+      return;
+    }
+
+    const nextLane = getLaneForArtifactFocus(artifactFocus);
+    const nextProjectType = getProjectTypeForArtifactFocus(artifactFocus);
+
+    setLaneSectionStore((currentStore) => {
+      const synced = syncLaneSectionStore(currentStore, nextLane);
+      const laneSections = synced[nextLane];
+
+      setValues((currentValues) => ({
+        ...currentValues,
+        lanePrimary: nextLane,
+        projectType: nextProjectType,
+        laneTags: [nextLane],
+        supportingProposalId: "",
+        laneSections
+      }));
+
+      return synced;
+    });
+  }, [artifactFocus, extendedProject]);
   const effectiveValues = useMemo(() => {
     if (!beginnerMode) {
       return values;
@@ -423,6 +620,79 @@ export function ProjectStudioForm({
     effectiveValues.recommendations.trim().length >= 12 &&
     effectiveValues.title.trim().length >= 12 &&
     effectiveValues.references.trim().length > 0;
+  const campaignAssessment = useMemo<ProjectCampaignAssessment>(
+    () =>
+      buildProjectCampaignAssessment({
+        scale: projectScale,
+        artifactFocus,
+        issueId: effectiveValues.issueId,
+        issueSeverity: selectedIssue?.severity ?? null,
+        title: effectiveValues.title,
+        summary: effectiveValues.summary,
+        abstract: effectiveValues.abstract,
+        essentialQuestion: effectiveValues.essentialQuestion,
+        methodsSummary: effectiveValues.methodsSummary,
+        overview: effectiveValues.overview,
+        context: effectiveValues.context,
+        evidence: effectiveValues.evidence,
+        analysis: effectiveValues.analysis,
+        recommendations: effectiveValues.recommendations,
+        reflection: effectiveValues.reflection,
+        missionGoal,
+        successCriteria,
+        targetLaunchDate: targetLaunchDate ? new Date(targetLaunchDate) : null,
+        keyTakeaways: effectiveValues.keyTakeaways
+          .split("\n")
+          .map((item) => item.trim())
+          .filter(Boolean),
+        artifactLinks: effectiveValues.artifactLinks
+          .split("\n")
+          .map((line) => line.split("|").map((value) => value.trim()))
+          .filter((line) => line[0] && line[1])
+          .map(([label, url]) => ({ label, url })),
+        references: effectiveValues.references
+          .split("\n")
+          .map((line) => line.split("|").map((value) => value.trim()))
+          .filter((line) => line[0] && line[1])
+          .map(([label, url, sourceType, note]) => ({
+            label,
+            url,
+            sourceType: (sourceType || "OTHER") as ReferenceEntry["sourceType"],
+            note: note || undefined
+          })),
+        laneSections: effectiveValues.laneSections,
+        feedbackCount: repairItems.length,
+        milestoneInputs: Object.values(ProjectMilestoneKey).map((key) => ({
+          key,
+          targetDate: milestoneDrafts[key]?.targetDate
+            ? new Date(milestoneDrafts[key].targetDate)
+            : buildDefaultProjectMilestones().find((entry) => entry.key === key)?.targetDate ?? new Date(),
+          completionNote: milestoneDrafts[key]?.completionNote ?? ""
+        })),
+        deliverableInputs: Object.values(ProjectDeliverableKey).map((key) => ({
+          key,
+          contentMd: deliverableDrafts[key]?.contentMd ?? "",
+          artifactUrl: deliverableDrafts[key]?.artifactUrl ?? ""
+        }))
+      }),
+    [
+      artifactFocus,
+      deliverableDrafts,
+      effectiveValues,
+      milestoneDrafts,
+      missionGoal,
+      projectScale,
+      repairItems.length,
+      selectedIssue?.severity,
+      successCriteria,
+      targetLaunchDate
+    ]
+  );
+  const [currentCampaignMilestoneKey, setCurrentCampaignMilestoneKey] = useState<ProjectMilestoneKey>(() =>
+    readCampaignStepFromQuery(currentStepQuery) ??
+    campaignAssessment.activeMilestoneKey ??
+    ProjectMilestoneKey.CHARTER
+  );
 
   useEffect(() => {
     return () => {
@@ -433,7 +703,7 @@ export function ProjectStudioForm({
   }, []);
 
   useEffect(() => {
-    if (beginnerMode) {
+    if (beginnerMode || extendedProject) {
       return;
     }
 
@@ -447,15 +717,15 @@ export function ProjectStudioForm({
       const repairStepId = assessment.fields[repairTarget.fieldId].stepId as ProjectCoachStepId;
       setCurrentStepId((current) => (current === repairStepId ? current : repairStepId));
     }
-  }, [assessment, beginnerMode, currentStepQuery, repairTarget]);
+  }, [assessment, beginnerMode, currentStepQuery, extendedProject, repairTarget]);
 
   useEffect(() => {
-    if (beginnerMode) {
+    if (beginnerMode || extendedProject) {
       return;
     }
 
     replaceStepUrl(pathname, searchParams.toString(), currentStepId);
-  }, [beginnerMode, currentStepId, pathname, searchParams]);
+  }, [beginnerMode, currentStepId, extendedProject, pathname, searchParams]);
 
   useEffect(() => {
     if (!beginnerMode) {
@@ -483,7 +753,7 @@ export function ProjectStudioForm({
   }, [beginnerMode, currentBeginnerStepId, pathname, searchParams]);
 
   useEffect(() => {
-    if (beginnerMode || !repairTarget) {
+    if (beginnerMode || extendedProject || !repairTarget) {
       return;
     }
 
@@ -497,10 +767,47 @@ export function ProjectStudioForm({
       const element = document.getElementById(getProjectCoachDomId(repairTarget.fieldId));
       element?.focus();
     }, 40);
-  }, [assessment, beginnerMode, currentStepId, repairTarget]);
+  }, [assessment, beginnerMode, currentStepId, extendedProject, repairTarget]);
+
+  useEffect(() => {
+    if (!extendedProject) {
+      return;
+    }
+
+    const queryMilestone = readCampaignStepFromQuery(currentStepQuery);
+    if (queryMilestone) {
+      setCurrentCampaignMilestoneKey((current) =>
+        current === queryMilestone ? current : queryMilestone
+      );
+      return;
+    }
+
+    const activeMilestoneKey = campaignAssessment.activeMilestoneKey;
+
+    if (activeMilestoneKey) {
+      setCurrentCampaignMilestoneKey((current) =>
+        current === activeMilestoneKey ? current : activeMilestoneKey
+      );
+    }
+  }, [campaignAssessment.activeMilestoneKey, currentStepQuery, extendedProject]);
+
+  useEffect(() => {
+    if (!extendedProject) {
+      return;
+    }
+
+    replaceStepUrl(pathname, searchParams.toString(), currentCampaignMilestoneKey);
+  }, [currentCampaignMilestoneKey, extendedProject, pathname, searchParams]);
 
   const performAutosave = useCallback(async () => {
-    if (!hasAnyDraftContent(effectiveValues) && !draftId) {
+    if (
+      !hasAnyDraftContent(effectiveValues, {
+        missionGoal,
+        successCriteria,
+        deliverableDrafts
+      }) &&
+      !draftId
+    ) {
       return;
     }
 
@@ -512,7 +819,15 @@ export function ProjectStudioForm({
     try {
       const response = await fetch("/api/studio/project-autosave", {
         method: "POST",
-        body: buildProjectFormData(effectiveValues, draftId)
+        body: buildProjectFormData(effectiveValues, draftId, {
+          projectScale,
+          artifactFocus,
+          missionGoal,
+          successCriteria,
+          targetLaunchDate,
+          milestoneDrafts,
+          deliverableDrafts
+        })
       });
       const result = await response.json();
 
@@ -524,7 +839,14 @@ export function ProjectStudioForm({
         setDraftId(result.id);
         if (!initial?.id && result.editUrl) {
           const params = new URLSearchParams(searchParams.toString());
-          params.set("step", beginnerMode ? currentBeginnerStepId : currentStepId);
+          params.set(
+            "step",
+            beginnerMode
+              ? currentBeginnerStepId
+              : extendedProject
+                ? currentCampaignMilestoneKey
+                : currentStepId
+          );
           router.replace(`${result.editUrl}?${params.toString()}`, { scroll: false });
         }
       }
@@ -542,12 +864,21 @@ export function ProjectStudioForm({
   }, [
     beginnerMode,
     currentBeginnerStepId,
+    currentCampaignMilestoneKey,
     currentStepId,
     draftId,
+    extendedProject,
     effectiveValues,
+    artifactFocus,
     initial?.id,
+    deliverableDrafts,
     router,
-    searchParams
+    searchParams,
+    milestoneDrafts,
+    missionGoal,
+    projectScale,
+    successCriteria,
+    targetLaunchDate
   ]);
 
   useEffect(() => {
@@ -597,6 +928,30 @@ export function ProjectStudioForm({
     setValues((current) => ({
       ...current,
       [fieldId]: applyStarter(current[fieldId as Exclude<ProjectCoachFieldId, "laneSections">] as string, starter, fieldId)
+    }));
+  }
+
+  function updateMilestoneTarget(key: ProjectMilestoneKey, value: string) {
+    setMilestoneDrafts((current) => ({
+      ...current,
+      [key]: {
+        ...current[key],
+        targetDate: value
+      }
+    }));
+  }
+
+  function updateDeliverableDraft(
+    key: ProjectDeliverableKey,
+    field: "contentMd" | "artifactUrl",
+    value: string
+  ) {
+    setDeliverableDrafts((current) => ({
+      ...current,
+      [key]: {
+        ...current[key],
+        [field]: value
+      }
     }));
   }
 
@@ -739,6 +1094,8 @@ export function ProjectStudioForm({
 
     if (beginnerMode) {
       setCurrentBeginnerStepId("issue");
+    } else if (extendedProject) {
+      setCurrentCampaignMilestoneKey(ProjectMilestoneKey.CHARTER);
     } else {
       setCurrentStepId("context");
     }
@@ -747,6 +1104,282 @@ export function ProjectStudioForm({
       const element = document.getElementById(getProjectCoachDomId("issueId"));
       element?.focus();
     }, 30);
+  }
+
+  function selectCampaignMilestone(stepId: ProjectMilestoneKey) {
+    const items = campaignAssessment.milestones;
+    const targetIndex = items.findIndex((item) => item.key === stepId);
+    const activeIndex = items.findIndex((item) => item.key === currentCampaignMilestoneKey);
+
+    if (targetIndex > activeIndex && !items[activeIndex]?.complete) {
+      return;
+    }
+
+    setCurrentCampaignMilestoneKey(stepId);
+  }
+
+  function goBackCampaign() {
+    const items = campaignAssessment.milestones;
+    const currentIndex = items.findIndex((item) => item.key === currentCampaignMilestoneKey);
+
+    if (currentIndex <= 0) {
+      return;
+    }
+
+    setCurrentCampaignMilestoneKey(items[currentIndex - 1].key);
+  }
+
+  function goNextCampaign() {
+    const items = campaignAssessment.milestones;
+    const currentIndex = items.findIndex((item) => item.key === currentCampaignMilestoneKey);
+    const currentMilestone = items[currentIndex];
+
+    if (!currentMilestone?.complete || currentIndex >= items.length - 1) {
+      return;
+    }
+
+    setCurrentCampaignMilestoneKey(items[currentIndex + 1].key);
+  }
+
+  function renderCampaignStep() {
+    const milestone = campaignAssessment.milestones.find(
+      (item) => item.key === currentCampaignMilestoneKey
+    );
+
+    if (!milestone) {
+      return null;
+    }
+
+    if (milestone.key === ProjectMilestoneKey.CHARTER) {
+      return (
+        <article className="panel overflow-hidden p-0">
+          <div className="bg-[linear-gradient(135deg,rgba(189,109,44,0.16),rgba(255,255,255,0.92))] p-6">
+            <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Milestone 1</p>
+            <h3 className="mt-3 font-display text-3xl text-ink">Write the campaign charter</h3>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-ink/72">
+              Lock the mission before the build gets big. This is the part that tells the student what they are trying to finish by launch week.
+            </p>
+          </div>
+
+          <div className="grid gap-6 p-6 xl:grid-cols-[1.05fr_0.95fr]">
+            <div className="space-y-5">
+              <div>
+                <label htmlFor={getProjectCoachDomId("title")} className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">
+                  Project title
+                </label>
+                <input
+                  id={getProjectCoachDomId("title")}
+                  value={values.title}
+                  onChange={(event) => updateField("title", event.target.value)}
+                  className="mt-2 w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-base text-ink outline-none focus:border-accent"
+                />
+              </div>
+
+              <div>
+                <label htmlFor={getProjectCoachDomId("essentialQuestion")} className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">
+                  Driving question
+                </label>
+                <textarea
+                  id={getProjectCoachDomId("essentialQuestion")}
+                  value={values.essentialQuestion}
+                  onChange={(event) => updateField("essentialQuestion", event.target.value)}
+                  className="mt-2 min-h-[140px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
+                />
+              </div>
+
+              <div>
+                <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">
+                  Artifact focus
+                </label>
+                <div className="mt-2 grid gap-3 md:grid-cols-3">
+                  {Object.values(ProjectArtifactFocus).map((focus) => (
+                    <button
+                      key={focus}
+                      type="button"
+                      onClick={() => setArtifactFocus(focus)}
+                      className={`rounded-[22px] border p-4 text-left transition ${
+                        artifactFocus === focus
+                          ? "border-accent bg-accent/10 shadow-panel"
+                          : "border-line bg-white/75 hover:border-accent/35"
+                      }`}
+                    >
+                      <p className="font-medium text-ink">{projectArtifactFocusLabels[focus]}</p>
+                      <p className="mt-2 text-sm leading-6 text-ink/65">
+                        {focus === ProjectArtifactFocus.RESEARCH
+                          ? "Investigate the pattern and make the case."
+                          : focus === ProjectArtifactFocus.TOOL
+                            ? "Build something useful that helps the league think."
+                            : "Make a real strategy plan with moves and risks."}
+                      </p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-5">
+              <div>
+                <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Mission goal</label>
+                <textarea
+                  value={missionGoal}
+                  onChange={(event) => setMissionGoal(event.target.value)}
+                  className="mt-2 min-h-[120px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
+                />
+              </div>
+
+              <div>
+                <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Success criteria</label>
+                <textarea
+                  value={successCriteria}
+                  onChange={(event) => setSuccessCriteria(event.target.value)}
+                  className="mt-2 min-h-[120px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
+                />
+              </div>
+
+              <div>
+                <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Target launch date</label>
+                <input
+                  type="date"
+                  value={targetLaunchDate}
+                  onChange={(event) => setTargetLaunchDate(event.target.value)}
+                  className="mt-2 w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
+                />
+              </div>
+            </div>
+          </div>
+        </article>
+      );
+    }
+
+    if (milestone.key === ProjectMilestoneKey.EVIDENCE_BOARD) {
+      return (
+        <article className="panel p-6">
+          <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Milestone 2</p>
+          <h3 className="mt-3 font-display text-3xl text-ink">Build the evidence board</h3>
+          <div className="mt-6 grid gap-5 xl:grid-cols-2">
+            <div>
+              <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Short summary</label>
+              <textarea value={values.summary} onChange={(event) => updateField("summary", event.target.value)} className="mt-2 min-h-[110px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+            </div>
+            <div>
+              <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Abstract</label>
+              <textarea value={values.abstract} onChange={(event) => updateField("abstract", event.target.value)} className="mt-2 min-h-[110px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+            </div>
+            <div>
+              <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Dossier opening</label>
+              <textarea value={values.overview} onChange={(event) => updateField("overview", event.target.value)} className="mt-2 min-h-[150px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+            </div>
+            <div>
+              <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Why it matters now</label>
+              <textarea value={values.context} onChange={(event) => updateField("context", event.target.value)} className="mt-2 min-h-[150px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+            </div>
+          </div>
+          <div className="mt-5">
+            <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Evidence notes</label>
+            <textarea value={values.evidence} onChange={(event) => updateField("evidence", event.target.value)} className="mt-2 min-h-[220px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+          </div>
+          <div className="mt-5">
+            <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Sources</label>
+            <textarea value={values.references} onChange={(event) => updateField("references", event.target.value)} className="mt-2 min-h-[160px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+          </div>
+        </article>
+      );
+    }
+
+    if (milestone.key === ProjectMilestoneKey.BUILD_SPRINT) {
+      return (
+        <article className="panel p-6">
+          <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Milestone 3</p>
+          <h3 className="mt-3 font-display text-3xl text-ink">Run the build sprint</h3>
+          <div className="mt-6 grid gap-5 xl:grid-cols-2">
+            <div>
+              <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Method or process</label>
+              <textarea value={values.methodsSummary} onChange={(event) => updateField("methodsSummary", event.target.value)} className="mt-2 min-h-[150px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+            </div>
+            <div>
+              <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Core build notes</label>
+              <textarea value={deliverableDrafts.CORE_BUILD.contentMd} onChange={(event) => updateDeliverableDraft(ProjectDeliverableKey.CORE_BUILD, "contentMd", event.target.value)} className="mt-2 min-h-[150px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+            </div>
+          </div>
+          <div className="mt-5">
+            <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Analysis</label>
+            <textarea value={values.analysis} onChange={(event) => updateField("analysis", event.target.value)} className="mt-2 min-h-[180px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+          </div>
+          <div className="mt-5">
+            <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Recommendation or move</label>
+            <textarea value={values.recommendations} onChange={(event) => updateField("recommendations", event.target.value)} className="mt-2 min-h-[160px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+          </div>
+          <div className="mt-5 grid gap-5 xl:grid-cols-2">
+            <div>
+              <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Core artifact URL</label>
+              <input value={deliverableDrafts.CORE_BUILD.artifactUrl} onChange={(event) => updateDeliverableDraft(ProjectDeliverableKey.CORE_BUILD, "artifactUrl", event.target.value)} className="mt-2 w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+            </div>
+            <div>
+              <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Artifact links</label>
+              <textarea value={values.artifactLinks} onChange={(event) => updateField("artifactLinks", event.target.value)} className="mt-2 min-h-[120px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+            </div>
+          </div>
+        </article>
+      );
+    }
+
+    if (milestone.key === ProjectMilestoneKey.FEEDBACK_LOOP) {
+      return (
+        <article className="panel p-6">
+          <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Milestone 4</p>
+          <h3 className="mt-3 font-display text-3xl text-ink">Run the feedback loop</h3>
+          {repairItems.length > 0 ? (
+            <div className="mt-6 grid gap-3">
+              {repairItems.map((item) => (
+                <div key={item.id} className="rounded-[22px] border border-warn/30 bg-warn/10 p-4 text-sm leading-6 text-ink/72">
+                  <p className="font-medium text-ink">{item.sectionKey}</p>
+                  <p className="mt-2">{item.body}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-6 rounded-[22px] border border-dashed border-line px-4 py-5 text-sm leading-6 text-ink/60">
+              Feedback will appear here after review notes are added.
+            </div>
+          )}
+          <div className="mt-6">
+            <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Revision log</label>
+            <textarea value={deliverableDrafts.REVISION_LOG.contentMd} onChange={(event) => updateDeliverableDraft(ProjectDeliverableKey.REVISION_LOG, "contentMd", event.target.value)} className="mt-2 min-h-[180px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+          </div>
+          <div className="mt-5">
+            <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Reflection</label>
+            <textarea value={values.reflection} onChange={(event) => updateField("reflection", event.target.value)} className="mt-2 min-h-[180px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+          </div>
+        </article>
+      );
+    }
+
+    return (
+      <article className="panel p-6">
+        <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Milestone 5</p>
+        <h3 className="mt-3 font-display text-3xl text-ink">Stage launch week</h3>
+        <div className="mt-6 grid gap-5 xl:grid-cols-2">
+          <div>
+            <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Key takeaways</label>
+            <textarea value={values.keyTakeaways} onChange={(event) => updateField("keyTakeaways", event.target.value)} className="mt-2 min-h-[160px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+          </div>
+          <div>
+            <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Launch deck</label>
+            <textarea value={deliverableDrafts.LAUNCH_DECK.contentMd} onChange={(event) => updateDeliverableDraft(ProjectDeliverableKey.LAUNCH_DECK, "contentMd", event.target.value)} className="mt-2 min-h-[160px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+          </div>
+        </div>
+        <div className="mt-5 grid gap-5 xl:grid-cols-2">
+          <div>
+            <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Launch deck link</label>
+            <input value={deliverableDrafts.LAUNCH_DECK.artifactUrl} onChange={(event) => updateDeliverableDraft(ProjectDeliverableKey.LAUNCH_DECK, "artifactUrl", event.target.value)} className="mt-2 w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+          </div>
+          <div>
+            <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Publication slug</label>
+            <input value={values.publicationSlug} onChange={(event) => updateField("publicationSlug", event.target.value)} className="mt-2 w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+          </div>
+        </div>
+      </article>
+    );
   }
 
   function renderHiddenFields() {
@@ -760,6 +1393,11 @@ export function ProjectStudioForm({
         <input type="hidden" name="methodsSummary" value={effectiveValues.methodsSummary} readOnly />
         <input type="hidden" name="projectType" value={effectiveValues.projectType} readOnly />
         <input type="hidden" name="lanePrimary" value={effectiveValues.lanePrimary} readOnly />
+        <input type="hidden" name="projectScale" value={projectScale} readOnly />
+        <input type="hidden" name="artifactFocus" value={artifactFocus} readOnly />
+        <input type="hidden" name="missionGoal" value={missionGoal} readOnly />
+        <input type="hidden" name="successCriteria" value={successCriteria} readOnly />
+        <input type="hidden" name="targetLaunchDate" value={targetLaunchDate} readOnly />
         <input type="hidden" name="beginnerMode" value={beginnerMode ? "1" : "0"} readOnly />
         <input type="hidden" name="teamId" value={effectiveValues.teamId} readOnly />
         <input type="hidden" name="supportingProposalId" value={effectiveValues.supportingProposalId} readOnly />
@@ -800,6 +1438,38 @@ export function ProjectStudioForm({
             <input type="hidden" name={`laneSectionTitle_${section.key}`} value={section.title} readOnly />
             <input type="hidden" name={`laneSectionPrompt_${section.key}`} value={section.prompt} readOnly />
             <input type="hidden" name={`laneSectionValue_${section.key}`} value={section.value} readOnly />
+          </div>
+        ))}
+        {Object.values(ProjectMilestoneKey).map((key) => (
+          <div key={`milestone-hidden-${key}`}>
+            <input
+              type="hidden"
+              name={`milestoneTargetDate_${key}`}
+              value={milestoneDrafts[key]?.targetDate ?? ""}
+              readOnly
+            />
+            <input
+              type="hidden"
+              name={`milestoneCompletionNote_${key}`}
+              value={milestoneDrafts[key]?.completionNote ?? ""}
+              readOnly
+            />
+          </div>
+        ))}
+        {Object.values(ProjectDeliverableKey).map((key) => (
+          <div key={`deliverable-hidden-${key}`}>
+            <input
+              type="hidden"
+              name={`deliverableContent_${key}`}
+              value={deliverableDrafts[key]?.contentMd ?? ""}
+              readOnly
+            />
+            <input
+              type="hidden"
+              name={`deliverableArtifactUrl_${key}`}
+              value={deliverableDrafts[key]?.artifactUrl ?? ""}
+              readOnly
+            />
           </div>
         ))}
       </>
@@ -1597,8 +2267,71 @@ export function ProjectStudioForm({
           .map((stepId) => `Finish ${beginnerStepContent[stepId].title.toLowerCase()}.`);
     }
   })();
-  const reviewMode = beginnerMode ? currentBeginnerStepId === "review" : currentStepId === "review";
-  const submitReady = beginnerMode ? beginnerSubmitReady : assessment.submitReady;
+  const campaignRailItems = campaignAssessment.milestones.map((milestone) => {
+    const status: CoachStepStatus =
+      milestone.status === "COMPLETE"
+        ? "done"
+        : milestone.status === "ACTIVE"
+          ? "needs_work"
+          : "not_started";
+
+    return {
+      id: milestone.key,
+      title: milestone.title,
+      shortTitle: milestone.title.split(" ")[0],
+      status,
+      current: currentCampaignMilestoneKey === milestone.key,
+      disabled:
+        campaignAssessment.milestones.findIndex((entry) => entry.key === milestone.key) >
+          campaignAssessment.milestones.findIndex((entry) => entry.key === currentCampaignMilestoneKey) &&
+        !campaignAssessment.milestones.find((entry) => entry.key === currentCampaignMilestoneKey)?.complete
+    };
+  });
+  const currentCampaignMilestone =
+    campaignAssessment.milestones.find((milestone) => milestone.key === currentCampaignMilestoneKey) ??
+    campaignAssessment.milestones[0];
+  const currentCampaignIndex = campaignAssessment.milestones.findIndex(
+    (milestone) => milestone.key === currentCampaignMilestoneKey
+  );
+  const completedCampaignMilestones = campaignAssessment.milestones.filter(
+    (milestone) => milestone.complete
+  ).length;
+  const campaignResearchMap = buildResearchStageDisplay(
+    campaignMilestoneToResearchStage(currentCampaignMilestoneKey),
+    {
+      completedStages: [
+        campaignAssessment.milestones.some((milestone) => milestone.key === ProjectMilestoneKey.CHARTER && milestone.complete)
+          ? "ASK_QUESTION"
+          : null,
+        campaignAssessment.milestones.some((milestone) => milestone.key === ProjectMilestoneKey.EVIDENCE_BOARD && milestone.complete)
+          ? "FIND_EVIDENCE"
+          : null,
+        campaignAssessment.milestones.some(
+          (milestone) =>
+            (milestone.key === ProjectMilestoneKey.BUILD_SPRINT ||
+              milestone.key === ProjectMilestoneKey.FEEDBACK_LOOP) &&
+            milestone.complete
+        )
+          ? "MAKE_CASE"
+          : null,
+        campaignAssessment.milestones.some((milestone) => milestone.key === ProjectMilestoneKey.LAUNCH_WEEK && milestone.complete)
+          ? "SHARE_WORK"
+          : null
+      ].filter(Boolean) as ResearchStage[],
+      previewStages: ["TEST_SYSTEM"],
+      nextStepDetail: campaignAssessment.nextAction
+    }
+  );
+  const reviewMode = beginnerMode
+    ? currentBeginnerStepId === "review"
+    : extendedProject
+      ? currentCampaignMilestoneKey === ProjectMilestoneKey.LAUNCH_WEEK
+      : currentStepId === "review";
+  const submitReady = beginnerMode
+    ? beginnerSubmitReady
+    : extendedProject
+      ? campaignAssessment.launchReady
+      : assessment.submitReady;
   const issueReminder = selectedIssue
     ? `Main issue: ${selectedIssue.title}.`
     : issueRequired
@@ -1621,6 +2354,14 @@ export function ProjectStudioForm({
           onAction: jumpToIssueStep
         }
       : null;
+  const daysRemaining = targetLaunchDate
+    ? Math.max(
+        0,
+        Math.ceil(
+          (new Date(`${targetLaunchDate}T00:00:00`).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+        )
+      )
+    : null;
   const beginnerResearchMap = buildResearchStageDisplay(beginnerStepToResearchStage(currentBeginnerStepId), {
     completedStages: [
       effectiveValues.issueId.trim() && effectiveValues.essentialQuestion.trim().length >= 8 ? "ASK_QUESTION" : null,
@@ -1707,6 +2448,264 @@ export function ProjectStudioForm({
         >
           {renderBeginnerRepairCard()}
           {renderBeginnerStep()}
+        </WizardShell>
+      ) : extendedProject ? (
+        <WizardShell
+          progressTitle="Project campaign"
+          documentTitle={effectiveValues.title || "Untitled campaign"}
+          progressDescription={`This is the month-long build track. ${projectArtifactFocusLabels[artifactFocus]} stays locked in while you move from charter to launch week. ${issueReminder}`}
+          autosaveMessage={autosaveState.message}
+          autosaveTone={autosaveState.tone}
+          completedSteps={completedCampaignMilestones}
+          totalSteps={campaignAssessment.milestones.length}
+          currentStepName={currentCampaignMilestone?.title}
+          issueCard={issueCard}
+          coachPanel={{
+            activeLabel: currentCampaignMilestone
+              ? `Milestone ${Math.max(currentCampaignIndex + 1, 1)}`
+              : "Campaign",
+            rightNow:
+              currentCampaignMilestone?.description ??
+              "Move the project through the next milestone so the month keeps its shape.",
+            whyItMatters:
+              "Extended projects feel bigger because each milestone has a clear exit rule, a real deliverable, and a visible unlock.",
+            nextMove: campaignAssessment.nextAction,
+            missingItems: currentCampaignMilestone?.missingItems ?? [],
+            strongExample:
+              currentCampaignMilestone?.key === ProjectMilestoneKey.CHARTER
+                ? "A strong charter names one issue, one driving question, and one finish line that can actually be reached this month."
+                : currentCampaignMilestone?.key === ProjectMilestoneKey.EVIDENCE_BOARD
+                  ? "A strong evidence board mixes direct notes, clean source links, and a clear explanation of why the pressure is real right now."
+                  : currentCampaignMilestone?.key === ProjectMilestoneKey.BUILD_SPRINT
+                    ? "A strong build sprint turns evidence into something visible: a tool, a strategy, or an analysis artifact another person could inspect."
+                    : currentCampaignMilestone?.key === ProjectMilestoneKey.FEEDBACK_LOOP
+                      ? "A strong feedback loop shows what changed after critique instead of pretending the first version was already final."
+                      : "A strong launch week package is easy to present: clear takeaways, a finished artifact, and a deck someone else can follow.",
+            sentenceStarter:
+              currentCampaignMilestone?.key === ProjectMilestoneKey.CHARTER
+                ? "By launch week, this project will..."
+                : currentCampaignMilestone?.key === ProjectMilestoneKey.EVIDENCE_BOARD
+                  ? "The clearest evidence showing this issue matters is..."
+                  : currentCampaignMilestone?.key === ProjectMilestoneKey.BUILD_SPRINT
+                    ? "The main thing this project now makes or proves is..."
+                    : currentCampaignMilestone?.key === ProjectMilestoneKey.FEEDBACK_LOOP
+                      ? "After feedback, I changed..."
+                      : "The audience should leave launch week understanding...",
+            celebrationNote: currentCampaignMilestone?.complete
+              ? "This milestone is complete. The next part of the campaign is unlocked."
+              : null,
+            repairLabel: repairTarget?.label ?? null
+          }}
+          researchMap={{
+            title: "Campaign research loop",
+            description:
+              "Even the bigger project still follows the same loop: ask the question, gather evidence, make the case, test what matters, and get the work ready to share.",
+            steps: campaignResearchMap.researchStageProgress,
+            nextStep: campaignResearchMap.nextResearchStep,
+            simulationPreviewAvailable: campaignResearchMap.simulationPreviewAvailable,
+            simulationPreviewLabel:
+              "The project can still point toward a later system test. The main job here is to make the case sturdy enough that a launch audience can understand it."
+          }}
+          rail={<WizardStepRail items={campaignRailItems} onSelect={selectCampaignMilestone} />}
+          footer={
+            <WizardFooter
+              currentStepNumber={Math.max(currentCampaignIndex + 1, 1)}
+              totalSteps={campaignAssessment.milestones.length}
+              nextMove={campaignAssessment.nextAction}
+              canGoBack={currentCampaignIndex > 0}
+              canGoNext={
+                currentCampaignIndex < campaignAssessment.milestones.length - 1 &&
+                Boolean(currentCampaignMilestone?.complete)
+              }
+              onSaveDraft={handleManualDraftSave}
+              onBack={goBackCampaign}
+              onNext={goNextCampaign}
+              submitReady={campaignAssessment.launchReady}
+              reviewMode={currentCampaignMilestoneKey === ProjectMilestoneKey.LAUNCH_WEEK}
+              submitLabel={intentLabel}
+            />
+          }
+        >
+          <div className="space-y-6">
+            <section className="overflow-hidden rounded-[30px] border border-accent/20 bg-[linear-gradient(135deg,rgba(189,109,44,0.16),rgba(255,255,255,0.98),rgba(30,85,120,0.08))]">
+              <div className="grid gap-6 p-6 xl:grid-cols-[1.15fr_0.85fr]">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-full border border-accent/25 bg-white/80 px-3 py-1 font-mono text-[11px] uppercase tracking-[0.22em] text-accent">
+                      Month-long mission
+                    </span>
+                    <span className="rounded-full border border-line bg-white/75 px-3 py-1 text-xs font-medium text-ink/70">
+                      {projectArtifactFocusLabels[artifactFocus]}
+                    </span>
+                    <span className="rounded-full border border-line bg-white/75 px-3 py-1 text-xs font-medium text-ink/70">
+                      {campaignAssessment.issuePressureLabel}
+                    </span>
+                  </div>
+                  <h3 className="mt-4 font-display text-4xl leading-tight text-ink">
+                    {effectiveValues.title || "Build the campaign before launch week"}
+                  </h3>
+                  <p className="mt-4 max-w-3xl text-sm leading-7 text-ink/72">
+                    {missionGoal.trim().length > 0
+                      ? missionGoal
+                      : "Start by writing the charter. The campaign becomes real once the mission goal, success criteria, and launch target are clear."}
+                  </p>
+
+                  <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-[24px] border border-line bg-white/78 p-4">
+                      <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">
+                        Countdown
+                      </p>
+                      <p className="mt-3 text-3xl font-semibold text-ink">
+                        {daysRemaining === null ? "Set date" : `${daysRemaining}d`}
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-ink/62">
+                        {targetLaunchDate || "Choose a target date so the month has shape."}
+                      </p>
+                    </div>
+                    <div className="rounded-[24px] border border-line bg-white/78 p-4">
+                      <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">
+                        Milestones cleared
+                      </p>
+                      <p className="mt-3 text-3xl font-semibold text-ink">
+                        {completedCampaignMilestones}/{campaignAssessment.milestones.length}
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-ink/62">
+                        Each cleared milestone unlocks the next push.
+                      </p>
+                    </div>
+                    <div className="rounded-[24px] border border-line bg-white/78 p-4">
+                      <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">
+                        Launch status
+                      </p>
+                      <p className="mt-3 text-3xl font-semibold text-ink">
+                        {campaignAssessment.launchReady ? "Ready" : "Building"}
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-ink/62">
+                        {campaignAssessment.launchReady
+                          ? "The full package is assembled for review."
+                          : "Finish the required deliverables before launch week can close."}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[28px] border border-line bg-white/75 p-5">
+                  <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">
+                    Milestone map
+                  </p>
+                  <div className="mt-4 space-y-3">
+                    {campaignAssessment.milestones.map((milestone, index) => (
+                      <button
+                        key={milestone.key}
+                        type="button"
+                        onClick={() => selectCampaignMilestone(milestone.key)}
+                        className={`flex w-full items-start justify-between gap-3 rounded-[22px] border px-4 py-3 text-left transition ${
+                          milestone.key === currentCampaignMilestoneKey
+                            ? "border-accent bg-accent/10"
+                            : "border-line bg-white/80 hover:border-accent/35"
+                        }`}
+                      >
+                        <div>
+                          <p className="font-medium text-ink">
+                            {index + 1}. {milestone.title}
+                          </p>
+                          <p className="mt-1 text-xs leading-5 text-ink/62">
+                            Target {milestone.targetDate.toLocaleDateString()}
+                          </p>
+                        </div>
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${
+                            milestone.complete
+                              ? "bg-success/12 text-success"
+                              : milestone.status === "ACTIVE"
+                                ? "bg-warn/12 text-warn"
+                                : "bg-mist/80 text-ink/55"
+                          }`}
+                        >
+                          {milestone.complete
+                            ? "Complete"
+                            : milestone.status === "ACTIVE"
+                              ? "Active"
+                              : "Locked"}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+              {campaignAssessment.deliverables.map((deliverable) => (
+                <div
+                  key={deliverable.key}
+                  className={`rounded-[24px] border p-4 ${
+                    deliverable.complete
+                      ? "border-success/25 bg-success/10"
+                      : "border-line bg-white/75"
+                  }`}
+                >
+                  <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">
+                    {deliverable.key.replaceAll("_", " ")}
+                  </p>
+                  <p className="mt-3 font-medium text-ink">{deliverable.title}</p>
+                  <p className="mt-2 text-sm leading-6 text-ink/64">{deliverable.detail}</p>
+                  <p className="mt-4 text-xs font-semibold uppercase tracking-[0.18em] text-ink/52">
+                    {deliverable.complete ? "Ready" : "In progress"}
+                  </p>
+                </div>
+              ))}
+            </section>
+
+            <div className="grid gap-6 xl:grid-cols-[1.15fr_0.85fr]">
+              <div>{renderCampaignStep()}</div>
+
+              <aside className="space-y-4">
+                <section className="panel p-5">
+                  <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">
+                    Current checkpoint
+                  </p>
+                  <h3 className="mt-3 font-display text-2xl text-ink">
+                    {currentCampaignMilestone?.title ?? "Campaign step"}
+                  </h3>
+                  <p className="mt-3 text-sm leading-6 text-ink/68">
+                    {campaignAssessment.nextAction}
+                  </p>
+                  {(currentCampaignMilestone?.missingItems ?? []).length > 0 ? (
+                    <ul className="mt-4 space-y-2 text-sm leading-6 text-ink/70">
+                      {(currentCampaignMilestone?.missingItems ?? []).map((item) => (
+                        <li key={item} className="rounded-2xl border border-line bg-white/75 px-3 py-2">
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-4 rounded-2xl border border-success/30 bg-success/10 px-4 py-3 text-sm leading-6 text-success">
+                      This checkpoint is ready. Move to the next milestone when you want.
+                    </p>
+                  )}
+                </section>
+
+                <section className="panel p-5">
+                  <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">
+                    Launch package
+                  </p>
+                  <div className="mt-4 space-y-3">
+                    {campaignAssessment.deliverables.map((deliverable) => (
+                      <div key={deliverable.key} className="rounded-2xl border border-line bg-white/75 px-4 py-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-sm font-medium text-ink">{deliverable.title}</p>
+                          <span className="text-xs font-semibold uppercase tracking-[0.16em] text-ink/52">
+                            {deliverable.complete ? "Ready" : "Missing"}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              </aside>
+            </div>
+          </div>
         </WizardShell>
       ) : (
         <WizardShell

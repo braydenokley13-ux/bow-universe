@@ -2,6 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 
+import { ProjectScale } from "@prisma/client";
+
 import { Badge } from "@/components/badge";
 import { Breadcrumb } from "@/components/breadcrumb";
 import { PrintButton } from "@/components/print-button";
@@ -13,6 +15,7 @@ import {
   reviewProjectAction,
   saveProjectFeedbackAction
 } from "@/server/actions";
+import { projectArtifactFocusLabels } from "@/lib/project-campaign";
 import { getLaneLabel, getPublicationDisplayLabel } from "@/lib/publications";
 import { getLanePrompt } from "@/lib/discovery-guidance";
 import { getProjectReviewReadiness } from "@/lib/review-readiness";
@@ -39,12 +42,31 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const parsed = parseProjectJson(project);
   const readiness = getProjectReviewReadiness(project);
   const canEdit = viewer?.id === project.createdByUserId || viewer?.role === "ADMIN";
+  const isExtendedProject = project.scale === ProjectScale.EXTENDED;
+  const daysToLaunch = project.targetLaunchDate
+    ? Math.ceil((project.targetLaunchDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+    : null;
+  const jumpSections = [
+    ...(isExtendedProject
+      ? ([
+          { id: "campaign", label: "Campaign" },
+          { id: "deliverables", label: "Deliverables" }
+        ] as const)
+      : []),
+    { id: "mission", label: "Mission" },
+    { id: "context", label: "Context" },
+    { id: "evidence", label: "Evidence" },
+    { id: "analysis", label: "Analysis" },
+    { id: "recommendation", label: "Recommendation" },
+    { id: "lane-sections", label: "Lane sections" },
+    { id: "references", label: "References" }
+  ];
 
   return (
     <div className="space-y-8 print-publication">
       <Breadcrumb items={[{ label: "Home", href: "/" }, { label: "Projects", href: "/projects" }, { label: project.title.length > 40 ? project.title.slice(0, 40) + "…" : project.title }]} />
       <SectionHeading
-        eyebrow="Project Publication"
+        eyebrow={isExtendedProject ? "Project Campaign" : "Project Publication"}
         title={project.title}
         description={project.abstract ?? project.summary}
       />
@@ -77,21 +99,118 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
             <p className="mt-3 text-sm leading-7 text-ink/76">{project.abstract ?? project.summary}</p>
           </div>
 
+          {isExtendedProject ? (
+            <section
+              id="campaign"
+              className="mt-6 overflow-hidden rounded-[30px] border border-accent/20 bg-[linear-gradient(135deg,rgba(189,109,44,0.16),rgba(255,255,255,0.98),rgba(30,85,120,0.08))]"
+            >
+              <div className="grid gap-6 p-6 xl:grid-cols-[1.1fr_0.9fr]">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge>{projectArtifactFocusLabels[parsed.artifactFocus]}</Badge>
+                    <Badge>{parsed.campaign.issuePressureLabel}</Badge>
+                    <Badge tone={parsed.campaign.launchReady ? "success" : "default"}>
+                      {parsed.campaign.launchReady ? "Launch ready" : "Campaign building"}
+                    </Badge>
+                  </div>
+                  <h3 className="mt-4 font-display text-3xl text-ink">Month-long mission campaign</h3>
+                  <p className="mt-3 max-w-3xl text-sm leading-7 text-ink/72">
+                    {parsed.missionGoal || "This project is using the extended campaign track, moving from charter to launch week instead of staying a short single-pass draft."}
+                  </p>
+
+                  <div className="mt-6 grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-[24px] border border-line bg-white/78 p-4">
+                      <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Countdown</p>
+                      <p className="mt-3 text-3xl font-semibold text-ink">
+                        {daysToLaunch === null ? "No date" : `${Math.max(daysToLaunch, 0)}d`}
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-ink/62">
+                        {project.targetLaunchDate?.toLocaleDateString() ?? "Target date not set yet."}
+                      </p>
+                    </div>
+                    <div className="rounded-[24px] border border-line bg-white/78 p-4">
+                      <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Milestones</p>
+                      <p className="mt-3 text-3xl font-semibold text-ink">
+                        {parsed.campaign.milestones.filter((milestone) => milestone.complete).length}/
+                        {parsed.campaign.milestones.length}
+                      </p>
+                      <p className="mt-2 text-sm leading-6 text-ink/62">
+                        The project unlocks its next stage by clearing the current one.
+                      </p>
+                    </div>
+                    <div className="rounded-[24px] border border-line bg-white/78 p-4">
+                      <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Success criteria</p>
+                      <p className="mt-3 text-sm leading-7 text-ink/68">
+                        {parsed.successCriteria || "No success criteria written yet."}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-[28px] border border-line bg-white/75 p-5">
+                  <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Milestone map</p>
+                  <div className="mt-4 space-y-3">
+                    {parsed.campaign.milestones.map((milestone, index) => (
+                      <div key={milestone.key} className="rounded-[22px] border border-line bg-white/85 px-4 py-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="font-medium text-ink">
+                            {index + 1}. {milestone.title}
+                          </p>
+                          <span className="text-xs font-semibold uppercase tracking-[0.18em] text-ink/52">
+                            {milestone.complete
+                              ? "Complete"
+                              : milestone.status === "ACTIVE"
+                                ? "Active"
+                                : "Locked"}
+                          </span>
+                        </div>
+                        <p className="mt-2 text-sm leading-6 text-ink/64">{milestone.description}</p>
+                        <p className="mt-2 text-xs uppercase tracking-[0.18em] text-ink/48">
+                          Target {milestone.targetDate.toLocaleDateString()}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </section>
+          ) : null}
+
           <div className="mt-6">
-            <SectionJumpNav
-              sections={[
-                { id: "mission", label: "Mission" },
-                { id: "context", label: "Context" },
-                { id: "evidence", label: "Evidence" },
-                { id: "analysis", label: "Analysis" },
-                { id: "recommendation", label: "Recommendation" },
-                { id: "lane-sections", label: "Lane sections" },
-                { id: "references", label: "References" }
-              ]}
-            />
+            <SectionJumpNav sections={jumpSections} />
           </div>
 
           <div className="mt-6 space-y-6">
+            {isExtendedProject ? (
+              <section id="deliverables">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="font-display text-2xl text-ink">Launch package</h3>
+                    <p className="mt-2 text-sm leading-6 text-ink/68">
+                      These five deliverables make the extended project feel like one coherent campaign instead of a loose pile of notes.
+                    </p>
+                  </div>
+                  <Badge>
+                    {parsed.campaign.deliverables.filter((deliverable) => deliverable.complete).length}/
+                    {parsed.campaign.deliverables.length} ready
+                  </Badge>
+                </div>
+                <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {parsed.campaign.deliverables.map((deliverable) => (
+                    <div key={deliverable.key} className="rounded-2xl border border-line bg-white/55 p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="font-medium text-ink">{deliverable.title}</p>
+                        <Badge tone={deliverable.complete ? "success" : "default"}>
+                          {deliverable.complete ? "Ready" : "Open"}
+                        </Badge>
+                      </div>
+                      <p className="mt-2 text-sm leading-6 text-ink/68">{deliverable.detail}</p>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            ) : null}
+
             <section id="mission">
               <h3 className="font-display text-2xl text-ink">Research question or mission</h3>
               <p className="mt-3 text-sm leading-7 text-ink/72">
@@ -182,9 +301,40 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         <div className="space-y-6">
           <ReviewSidebar eyebrow="Project review" title="What is strong and what is missing" readiness={readiness} />
 
+          {isExtendedProject ? (
+            <section className="panel p-6">
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="font-display text-2xl text-ink">Campaign events</h3>
+                <Badge>{project.campaignEvents.length}</Badge>
+              </div>
+              <div className="mt-5 space-y-3">
+                {project.campaignEvents.length > 0 ? (
+                  project.campaignEvents.map((event) => (
+                    <div key={event.id} className="rounded-2xl border border-line bg-white/60 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-3">
+                        <p className="font-medium text-ink">{event.title}</p>
+                        <Badge>{event.kind}</Badge>
+                      </div>
+                      <p className="mt-2 text-sm leading-6 text-ink/68">{event.body}</p>
+                      <p className="mt-2 text-xs uppercase tracking-[0.2em] text-ink/48">
+                        {new Date(event.createdAt).toLocaleString()}
+                      </p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="rounded-2xl border border-dashed border-line px-4 py-6 text-sm text-ink/60">
+                    No campaign events yet. They appear as milestones unlock, feedback lands, and launch week gets staged.
+                  </p>
+                )}
+              </div>
+            </section>
+          ) : null}
+
           <section className="panel p-6">
             <div className="flex items-center justify-between gap-3">
-              <h3 className="font-display text-2xl text-ink">Publication metadata</h3>
+              <h3 className="font-display text-2xl text-ink">
+                {isExtendedProject ? "Campaign metadata" : "Publication metadata"}
+              </h3>
               <Badge>{getLaneLabel(parsed.lanePrimary)}</Badge>
             </div>
 

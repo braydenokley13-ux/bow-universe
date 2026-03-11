@@ -1,5 +1,7 @@
 import { notFound } from "next/navigation";
 
+import { ProjectScale } from "@prisma/client";
+
 import { ProjectStudioForm } from "@/components/project-studio-form";
 import { resolveProjectPrimaryIssueId } from "@/lib/project-issues";
 import { SectionHeading } from "@/components/section-heading";
@@ -48,22 +50,38 @@ export default async function EditProjectPage({
       : [];
   const beginnerMode =
     viewer?.role === "STUDENT"
-      ? shouldUseBeginnerProjectMode({
-          hasSubmittedProject: hasStudentSubmittedProject(studentProjects),
-          currentProjectStatus: project.submissionStatus,
-          forceFullStudio: resolvedSearchParams.studio === "full"
-        })
+      ? project.scale === ProjectScale.EXTENDED
+        ? false
+        : shouldUseBeginnerProjectMode({
+            hasSubmittedProject: hasStudentSubmittedProject(studentProjects),
+            currentProjectStatus: project.submissionStatus,
+            forceFullStudio: resolvedSearchParams.studio === "full"
+          })
       : false;
 
   return (
     <div className="space-y-8">
       <SectionHeading
-        eyebrow={beginnerMode ? "First Project Guide" : "Project Studio"}
-        title={beginnerMode ? `Keep building ${project.title}` : `Revise ${project.title}`}
+        eyebrow={
+          beginnerMode
+            ? "First Project Guide"
+            : project.scale === ProjectScale.EXTENDED
+              ? "Project Campaign Studio"
+              : "Project Studio"
+        }
+        title={
+          beginnerMode
+            ? `Keep building ${project.title}`
+            : project.scale === ProjectScale.EXTENDED
+              ? `Run the campaign for ${project.title}`
+              : `Revise ${project.title}`
+        }
         description={
           beginnerMode
             ? "This route reopens the guided first-project flow so students can fix one question at a time, keep moving, and submit without getting buried in advanced fields."
-            : "This route reopens the adaptive project coach so students can strengthen the lane-specific sections, improve weak evidence or analysis, and resubmit a more publication-ready project."
+            : project.scale === ProjectScale.EXTENDED
+              ? "This route reopens the month-long campaign workspace so students can move milestone by milestone, complete the launch package, and tighten the project before review."
+              : "This route reopens the adaptive project coach so students can strengthen the lane-specific sections, improve weak evidence or analysis, and resubmit a more publication-ready project."
         }
       />
 
@@ -87,6 +105,21 @@ export default async function EditProjectPage({
           }))}
         initial={{
           id: project.id,
+          projectScale: parsed.scale,
+          artifactFocus: parsed.artifactFocus,
+          missionGoal: parsed.missionGoal,
+          successCriteria: parsed.successCriteria,
+          targetLaunchDate: parsed.targetLaunchDate,
+          milestones: parsed.campaign.milestones.map((milestone) => ({
+            key: milestone.key,
+            targetDate: milestone.targetDate,
+            completionNote: milestone.completionNote
+          })),
+          deliverables: parsed.campaign.deliverables.map((deliverable) => ({
+            key: deliverable.key,
+            contentMd: deliverable.contentMd,
+            artifactUrl: deliverable.artifactUrl
+          })),
           title: project.title,
           summary: project.summary,
           abstract: project.abstract ?? project.summary,

@@ -1,4 +1,12 @@
-import { IssueStatus, Prisma, ProjectType, ProposalStatus, PublicationSourceType, SubmissionStatus } from "@prisma/client";
+import {
+  IssueStatus,
+  Prisma,
+  ProjectType,
+  ProjectScale,
+  ProposalStatus,
+  PublicationSourceType,
+  SubmissionStatus
+} from "@prisma/client";
 
 import {
   getPrimaryLaneTag,
@@ -9,6 +17,12 @@ import {
   parseReferences,
   parseTakeaways
 } from "@/lib/publications";
+import {
+  buildProjectCampaignAssessment,
+  getArtifactFocusForProjectType,
+  type ProjectCampaignDeliverableInput,
+  type ProjectCampaignMilestoneInput
+} from "@/lib/project-campaign";
 import { prisma } from "@/lib/prisma";
 import type {
   ArtifactLink,
@@ -270,6 +284,10 @@ export async function getProjectsPageData() {
       include: {
         createdBy: true,
         team: true,
+        milestones: {
+          orderBy: { targetDate: "asc" }
+        },
+        deliverables: true,
         issueLinks: {
           include: {
             issue: true
@@ -317,6 +335,13 @@ export async function getProjectPageData(projectId: string) {
       team: true,
       primaryIssue: true,
       supportingProposal: true,
+      milestones: {
+        orderBy: { targetDate: "asc" }
+      },
+      deliverables: true,
+      campaignEvents: {
+        orderBy: { createdAt: "desc" }
+      },
       issueLinks: {
         include: {
           issue: true
@@ -616,6 +641,13 @@ export async function getProjectStudioData(projectId?: string) {
           where: { id: projectId },
           include: {
             primaryIssue: true,
+            milestones: {
+              orderBy: { targetDate: "asc" }
+            },
+            deliverables: true,
+            campaignEvents: {
+              orderBy: { createdAt: "desc" }
+            },
             issueLinks: {
               include: {
                 issue: true
@@ -726,6 +758,13 @@ export async function getPublicationPageData(slug: string) {
 }
 
 export function parseProjectJson(project: {
+  id?: string;
+  title?: string;
+  summary?: string;
+  abstract?: string | null;
+  essentialQuestion?: string | null;
+  methodsSummary?: string | null;
+  issueId?: string | null;
   laneTagsJson: Prisma.JsonValue;
   artifactLinksJson: Prisma.JsonValue;
   contentJson?: Prisma.JsonValue | null;
@@ -735,6 +774,22 @@ export function parseProjectJson(project: {
   keyTakeawaysJson?: Prisma.JsonValue | null;
   lanePrimary?: string | null;
   projectType?: ProjectType;
+  scale?: ProjectScale;
+  artifactFocus?: string | null;
+  missionGoal?: string | null;
+  successCriteria?: string | null;
+  targetLaunchDate?: Date | null;
+  milestones?: Array<{
+    key: ProjectCampaignMilestoneInput["key"];
+    targetDate: Date;
+    completionNote: string | null;
+  }>;
+  deliverables?: Array<{
+    key: ProjectCampaignDeliverableInput["key"];
+    contentMd: string | null;
+    artifactUrl: string | null;
+  }>;
+  feedbackEntries?: Array<unknown>;
 }) {
   const laneTags = jsonValue<LaneTag[]>(project.laneTagsJson) ?? [];
   const lanePrimary = (project.lanePrimary as LaneTag | null) ?? getPrimaryLaneTag(
@@ -743,16 +798,64 @@ export function parseProjectJson(project: {
   );
   const content = parseProjectContent(project.contentJson, lanePrimary);
   const artifactLinks = jsonValue<ArtifactLink[]>(project.artifactLinksJson) ?? [];
+  const references = parseReferences(project.referencesJson);
+  const keywords = parseKeywords(project.keywordsJson);
+  const keyTakeaways = parseTakeaways(project.keyTakeawaysJson);
+  const scale = project.scale ?? ProjectScale.FIRST_PROJECT;
+  const artifactFocus =
+    (project.artifactFocus as ReturnType<typeof getArtifactFocusForProjectType> | null) ??
+    getArtifactFocusForProjectType(project.projectType ?? ProjectType.INVESTIGATION);
+  const campaign = buildProjectCampaignAssessment({
+    scale,
+    artifactFocus,
+    issueId: project.issueId ?? "",
+    issueSeverity: null,
+    title: project.title ?? "",
+    summary: project.summary ?? "",
+    abstract: project.abstract ?? "",
+    essentialQuestion: project.essentialQuestion ?? content.questionOrMission,
+    methodsSummary: project.methodsSummary ?? "",
+    overview: content.overview,
+    context: content.context,
+    evidence: content.evidence,
+    analysis: content.analysis,
+    recommendations: content.recommendations,
+    reflection: content.reflection,
+    missionGoal: project.missionGoal ?? "",
+    successCriteria: project.successCriteria ?? "",
+    targetLaunchDate: project.targetLaunchDate ?? null,
+    keyTakeaways,
+    artifactLinks: artifactLinks.length > 0 ? artifactLinks : content.artifacts,
+    references,
+    laneSections: content.laneSections,
+    feedbackCount: project.feedbackEntries?.length ?? 0,
+    milestoneInputs: (project.milestones ?? []).map((milestone) => ({
+      key: milestone.key,
+      targetDate: milestone.targetDate,
+      completionNote: milestone.completionNote
+    })),
+    deliverableInputs: (project.deliverables ?? []).map((deliverable) => ({
+      key: deliverable.key,
+      contentMd: deliverable.contentMd,
+      artifactUrl: deliverable.artifactUrl
+    }))
+  });
 
   return {
     lanePrimary,
     laneTags,
+    scale,
+    artifactFocus,
+    missionGoal: project.missionGoal ?? "",
+    successCriteria: project.successCriteria ?? "",
+    targetLaunchDate: project.targetLaunchDate ?? null,
     artifactLinks: artifactLinks.length > 0 ? artifactLinks : content.artifacts,
     content,
     checklist: parseChecklist(project.reviewChecklistJson),
-    references: parseReferences(project.referencesJson),
-    keywords: parseKeywords(project.keywordsJson),
-    keyTakeaways: parseTakeaways(project.keyTakeawaysJson)
+    references,
+    keywords,
+    keyTakeaways,
+    campaign
   };
 }
 

@@ -78,6 +78,46 @@ enum ProjectType {
   PROPOSAL_SUPPORT
 }
 
+enum ProjectScale {
+  FIRST_PROJECT
+  EXTENDED
+}
+
+enum ProjectArtifactFocus {
+  RESEARCH
+  TOOL
+  STRATEGY
+}
+
+enum ProjectMilestoneKey {
+  CHARTER
+  EVIDENCE_BOARD
+  BUILD_SPRINT
+  FEEDBACK_LOOP
+  LAUNCH_WEEK
+}
+
+enum ProjectMilestoneStatus {
+  LOCKED
+  ACTIVE
+  COMPLETE
+}
+
+enum ProjectDeliverableKey {
+  DOSSIER
+  CORE_BUILD
+  EVIDENCE_BOARD
+  REVISION_LOG
+  LAUNCH_DECK
+}
+
+enum ProjectCampaignEventKind {
+  UNLOCK
+  FEEDBACK
+  DEADLINE
+  LAUNCH
+}
+
 enum PublicationType {
   TOOL_BRIEF
   POLICY_MEMO
@@ -413,6 +453,8 @@ model Project {
   title                            String
   summary                          String
   projectType                      ProjectType
+  scale                            ProjectScale     @default(FIRST_PROJECT)
+  artifactFocus                    ProjectArtifactFocus?
   submissionStatus                 SubmissionStatus @default(DRAFT)
   publicationType                  PublicationType
   lanePrimary                      LaneTag?
@@ -427,6 +469,9 @@ model Project {
   abstract                         String?
   essentialQuestion                String?
   methodsSummary                   String?
+  missionGoal                      String?
+  successCriteria                  String?
+  targetLaunchDate                 DateTime?
   keyTakeawaysJson                 Json?
   referencesJson                   Json?
   keywordsJson                     Json?
@@ -451,14 +496,20 @@ model Project {
   comments                         ProjectComment[]
   feedbackEntries                  ProjectFeedback[]
   revisions                        ProjectRevision[]
+  milestones                       ProjectMilestone[]
+  deliverables                     ProjectDeliverable[]
+  campaignEvents                   ProjectCampaignEvent[]
 
   @@index([issueId])
   @@index([teamId])
   @@index([createdByUserId])
   @@index([projectType])
+  @@index([scale])
+  @@index([artifactFocus])
   @@index([submissionStatus])
   @@index([publicationSlug])
   @@index([supportingProposalId])
+  @@index([targetLaunchDate])
   @@index([createdAt])
 }
 
@@ -540,6 +591,54 @@ model ProjectRevision {
   @@index([projectId])
   @@index([createdByUserId])
   @@index([createdAt])
+}
+
+model ProjectMilestone {
+  id             String                 @id @default(cuid())
+  projectId      String
+  key            ProjectMilestoneKey
+  title          String
+  status         ProjectMilestoneStatus @default(LOCKED)
+  targetDate     DateTime
+  completedAt    DateTime?
+  completionNote String?
+  project        Project                @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, key])
+  @@index([projectId, status])
+  @@index([targetDate])
+}
+
+model ProjectDeliverable {
+  id          String                @id @default(cuid())
+  projectId   String
+  key         ProjectDeliverableKey
+  title       String
+  required    Boolean               @default(true)
+  complete    Boolean               @default(false)
+  contentMd   String?
+  artifactUrl String?
+  metadataJson Json?
+  completedAt DateTime?
+  project     Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, key])
+  @@index([projectId, complete])
+}
+
+model ProjectCampaignEvent {
+  id           String                   @id @default(cuid())
+  projectId    String
+  kind         ProjectCampaignEventKind
+  milestoneKey ProjectMilestoneKey?
+  title        String
+  body         String
+  metadataJson Json?
+  createdAt    DateTime                 @default(now())
+  project      Project                  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt])
+  @@index([kind, createdAt])
 }
 
 model ProposalRevision {

@@ -1,10 +1,14 @@
 import Link from "next/link";
 
-import { ProjectType } from "@prisma/client";
+import { ProjectArtifactFocus, ProjectScale, ProjectType } from "@prisma/client";
 
 import { Badge } from "@/components/badge";
 import { ProjectStudioForm } from "@/components/project-studio-form";
 import { SectionHeading } from "@/components/section-heading";
+import {
+  buildDefaultProjectDeliverables,
+  buildDefaultProjectMilestones
+} from "@/lib/project-campaign";
 import { prisma } from "@/lib/prisma";
 import { parseProjectStudioPrefill } from "@/lib/studio-entry";
 import {
@@ -18,10 +22,21 @@ import { getProjectStudioData } from "@/server/data";
 
 const validLanes: LaneTag[] = [
   "TOOL_BUILDERS",
-  "POLICY_REFORM_ARCHITECTS",
   "STRATEGIC_OPERATORS",
   "ECONOMIC_INVESTIGATORS"
 ];
+
+function getArtifactFocusForLane(lane: LaneTag) {
+  if (lane === "TOOL_BUILDERS") {
+    return ProjectArtifactFocus.TOOL;
+  }
+
+  if (lane === "STRATEGIC_OPERATORS") {
+    return ProjectArtifactFocus.STRATEGY;
+  }
+
+  return ProjectArtifactFocus.RESEARCH;
+}
 
 export default async function NewProjectPage({
   searchParams
@@ -62,16 +77,20 @@ export default async function NewProjectPage({
   const lanePrimary = validLanes.includes(prefill.lanePrimary ?? "ECONOMIC_INVESTIGATORS")
     ? (prefill.lanePrimary as LaneTag)
     : "ECONOMIC_INVESTIGATORS";
+  const projectScale = beginnerMode ? ProjectScale.FIRST_PROJECT : ProjectScale.EXTENDED;
+  const artifactFocus = getArtifactFocusForLane(lanePrimary);
+  const initialMilestones = buildDefaultProjectMilestones();
+  const initialDeliverables = buildDefaultProjectDeliverables();
 
   return (
     <div className="space-y-8">
       <SectionHeading
-        eyebrow={beginnerMode ? "First Project Guide" : "Project Coach"}
-        title={beginnerMode ? "One question at a time" : "Adaptive lane-by-lane project wizard"}
+        eyebrow={beginnerMode ? "First Project Guide" : "Project Campaign Studio"}
+        title={beginnerMode ? "One question at a time" : "Build a month-long mission campaign"}
         description={
           beginnerMode
             ? "This version keeps the work small. Pick an issue, answer one guided question at a time, and the studio will build the formal project fields for you before you submit."
-            : "This studio now coaches every lane one small step at a time. Tool Builders, Policy Reform Architects, Strategic Operators, and Economic Investigators each get lane-specific prompts, section coaching, and a stronger review gate before anything is submitted. Reform-support project work stays here, while formal proposal memos stay in the separate proposal studio."
+            : "This studio turns the next project into a bigger month-long mission. Students move through a charter, evidence board, build sprint, feedback loop, and launch week with deliverables that unlock along the way."
         }
       />
 
@@ -91,24 +110,37 @@ export default async function NewProjectPage({
             intentLabel="Submit for review"
             beginnerMode={beginnerMode}
             initial={{
+              projectScale,
+              artifactFocus,
+              missionGoal: "",
+              successCriteria: "",
+              targetLaunchDate: initialMilestones[4]?.targetDate ?? null,
+              milestones: initialMilestones.map((milestone) => ({
+                key: milestone.key,
+                targetDate: milestone.targetDate,
+                completionNote: milestone.completionNote
+              })),
+              deliverables: initialDeliverables.map((deliverable) => ({
+                key: deliverable.key,
+                contentMd: deliverable.contentMd,
+                artifactUrl: deliverable.artifactUrl
+              })),
               title: "",
               summary: "",
               abstract: "",
               essentialQuestion: "",
               methodsSummary: "",
               projectType:
-                lanePrimary === "TOOL_BUILDERS"
+                artifactFocus === ProjectArtifactFocus.TOOL
                   ? ProjectType.TOOL
-                  : lanePrimary === "STRATEGIC_OPERATORS"
+                  : artifactFocus === ProjectArtifactFocus.STRATEGY
                     ? ProjectType.STRATEGY
-                    : lanePrimary === "POLICY_REFORM_ARCHITECTS"
-                      ? ProjectType.PROPOSAL_SUPPORT
-                      : ProjectType.INVESTIGATION,
+                    : ProjectType.INVESTIGATION,
               lanePrimary,
               laneTags: [lanePrimary],
               issueId: prefill.issueId,
               teamId: prefill.teamId,
-              supportingProposalId: prefill.supportingProposalId,
+              supportingProposalId: beginnerMode ? prefill.supportingProposalId : "",
               artifactLinks: [],
               references: [],
               keywords: [],

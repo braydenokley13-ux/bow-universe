@@ -183,7 +183,7 @@ export function getSuggestedLaneForIssue(input: {
   }
 
   if (/(rule|policy|tax|apron|revenue sharing|cap|reform)/.test(text)) {
-    return "POLICY_REFORM_ARCHITECTS";
+    return "ECONOMIC_INVESTIGATORS";
   }
 
   return "ECONOMIC_INVESTIGATORS";
@@ -214,10 +214,7 @@ export function buildRecommendedMissionCandidates(input: {
         lane: suggestedLane,
         issueId: issue.id,
         teamId,
-        supportingProposalId:
-          suggestedLane === "POLICY_REFORM_ARCHITECTS" || supportingProposalId
-            ? supportingProposalId
-            : null
+        supportingProposalId
       });
 
       return {
