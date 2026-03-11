@@ -5,52 +5,28 @@ type Milestone = {
   complete: boolean;
 };
 
-function deriveMilestones(
-  projects: Array<{ submissionStatus: string }>,
-  proposals: Array<{ status: string }>
-): Milestone[] {
-  const hasAnyProject = projects.length > 0;
-
-  const hasSubmitted =
-    projects.some((p) =>
-      ["SUBMITTED", "REVISION_REQUESTED", "APPROVED_FOR_INTERNAL_PUBLICATION", "PUBLISHED_INTERNAL", "MARKED_EXTERNAL_READY", "APPROVED_FOR_EXTERNAL_PUBLICATION"].includes(p.submissionStatus)
-    ) ||
-    proposals.some((p) =>
-      ["SUBMITTED", "REVISION_REQUESTED", "APPROVED_FOR_INTERNAL_PUBLICATION", "PUBLISHED_INTERNAL", "MARKED_EXTERNAL_READY", "APPROVED_FOR_EXTERNAL_PUBLICATION"].includes(p.status)
-    );
-
-  const hasAddressedFeedback =
-    projects.some((p) =>
-      ["APPROVED_FOR_INTERNAL_PUBLICATION", "PUBLISHED_INTERNAL", "MARKED_EXTERNAL_READY", "APPROVED_FOR_EXTERNAL_PUBLICATION"].includes(p.submissionStatus)
-    ) ||
-    proposals.some((p) =>
-      ["APPROVED_FOR_INTERNAL_PUBLICATION", "PUBLISHED_INTERNAL", "MARKED_EXTERNAL_READY", "APPROVED_FOR_EXTERNAL_PUBLICATION"].includes(p.status)
-    );
-
-  const hasPublished =
-    projects.some((p) =>
-      ["PUBLISHED_INTERNAL", "MARKED_EXTERNAL_READY", "APPROVED_FOR_EXTERNAL_PUBLICATION"].includes(p.submissionStatus)
-    ) ||
-    proposals.some((p) =>
-      ["PUBLISHED_INTERNAL", "MARKED_EXTERNAL_READY", "APPROVED_FOR_EXTERNAL_PUBLICATION"].includes(p.status)
-    );
-
+function deriveMilestones(outcomeStats: {
+  realArtifacts: number;
+  evidenceBacked: number;
+  verifiedImpact: number;
+}): Milestone[] {
   return [
-    { label: "Pick a lane", complete: hasAnyProject },
-    { label: "Save your first draft", complete: hasAnyProject },
-    { label: "Submit for review", complete: hasSubmitted },
-    { label: "Address feedback", complete: hasAddressedFeedback },
-    { label: "Get published", complete: hasPublished }
+    { label: "Make something real", complete: outcomeStats.realArtifacts > 0 },
+    { label: "Back it with evidence", complete: outcomeStats.evidenceBacked > 0 },
+    { label: "Get it verified", complete: outcomeStats.verifiedImpact > 0 }
   ];
 }
 
 type StudentProgressStripProps = {
-  projects: Array<{ submissionStatus: string }>;
-  proposals: Array<{ status: string }>;
+  outcomeStats: {
+    realArtifacts: number;
+    evidenceBacked: number;
+    verifiedImpact: number;
+  };
 };
 
-export function StudentProgressStrip({ projects, proposals }: StudentProgressStripProps) {
-  const milestones = deriveMilestones(projects, proposals);
+export function StudentProgressStrip({ outcomeStats }: StudentProgressStripProps) {
+  const milestones = deriveMilestones(outcomeStats);
   const currentIndex = milestones.findIndex((m) => !m.complete);
   const activeIndex = currentIndex === -1 ? milestones.length - 1 : currentIndex;
 

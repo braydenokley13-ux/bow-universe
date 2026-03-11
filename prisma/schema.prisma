@@ -117,6 +117,19 @@ enum ChallengeScoreEventKind {
   SPOTLIGHT
 }
 
+enum StudentOutcomeKind {
+  ARTIFACT_COMPLETED
+  EVIDENCE_DEFENDED
+  VERIFIED_IMPACT
+}
+
+enum StudentOutcomeStatus {
+  DRAFT
+  PENDING_VERIFICATION
+  VERIFIED
+  REJECTED
+}
+
 model User {
   id                    String                 @id @default(cuid())
   name                  String
@@ -158,6 +171,8 @@ model User {
   challengeScoreEvents  ChallengeScoreEvent[]  @relation("ChallengeScoreEventByUser")
   createdCohorts        Cohort[]               @relation("CohortCreatedBy")
   cohortMemberships     CohortMember[]         @relation("CohortMemberships")
+  studentOutcomes       StudentOutcome[]       @relation("StudentOutcomeOwner")
+  verifiedOutcomes      StudentOutcome[]       @relation("StudentOutcomeVerifiedBy")
 
   @@index([linkedTeamId])
   @@index([commissionerId])
@@ -579,6 +594,31 @@ model Publication {
   @@index([publicationType])
   @@index([lanePrimary])
   @@index([publishedAt])
+}
+
+model StudentOutcome {
+  id               String               @id @default(cuid())
+  userId           String
+  sourceType       PublicationSourceType
+  sourceId         String
+  kind             StudentOutcomeKind
+  status           StudentOutcomeStatus @default(DRAFT)
+  studentSummary   String?
+  proofJson        Json?
+  submittedAt      DateTime?
+  verifiedAt       DateTime?
+  verifiedByUserId String?
+  reviewNote       String?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  user             User                 @relation("StudentOutcomeOwner", fields: [userId], references: [id], onDelete: Cascade)
+  verifiedBy       User?                @relation("StudentOutcomeVerifiedBy", fields: [verifiedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([sourceType, sourceId, kind])
+  @@index([userId, kind, status])
+  @@index([sourceType, sourceId])
+  @@index([status, createdAt])
+  @@index([verifiedByUserId])
 }
 
 model PublicationExport {

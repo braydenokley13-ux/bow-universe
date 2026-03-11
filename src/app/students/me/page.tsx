@@ -3,9 +3,11 @@ import { redirect } from "next/navigation";
 
 import { Badge } from "@/components/badge";
 import { SectionHeading } from "@/components/section-heading";
+import { StudentOutcomeLedger } from "@/components/student-outcome-ledger";
+import { StudentProgressStrip } from "@/components/student-progress-strip";
 import { gradeBandDescriptions, gradeBandLabels } from "@/lib/types";
 import { prisma } from "@/lib/prisma";
-import { updateStudentGradeBandAction } from "@/server/actions";
+import { submitOutcomeProofAction, updateStudentGradeBandAction } from "@/server/actions";
 import { getViewer } from "@/server/auth";
 import { getStudentPortfolioData } from "@/server/showcase-data";
 
@@ -64,24 +66,32 @@ export default async function StudentPortfolioPage({
         </section>
       ) : null}
 
+      <StudentProgressStrip outcomeStats={portfolio.outcomeStats} />
+
       <section className="grid gap-4 md:grid-cols-4">
         <div className="panel p-5">
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Real artifacts</p>
+          <p className="mt-3 font-display text-3xl text-ink">{portfolio.outcomeStats.realArtifacts}</p>
+        </div>
+        <div className="panel p-5">
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Evidence backed</p>
+          <p className="mt-3 font-display text-3xl text-ink">{portfolio.outcomeStats.evidenceBacked}</p>
+        </div>
+        <div className="panel p-5">
+          <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Verified impact</p>
+          <p className="mt-3 font-display text-3xl text-ink">{portfolio.outcomeStats.verifiedImpact}</p>
+        </div>
+        <div className="panel p-5">
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Published</p>
-          <p className="mt-3 font-display text-3xl text-ink">{portfolio.stats.publishedCount}</p>
-        </div>
-        <div className="panel p-5">
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Open work</p>
-          <p className="mt-3 font-display text-3xl text-ink">{portfolio.stats.openCount}</p>
-        </div>
-        <div className="panel p-5">
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Feedback answered</p>
-          <p className="mt-3 font-display text-3xl text-ink">{portfolio.stats.feedbackCount}</p>
-        </div>
-        <div className="panel p-5">
-          <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Revisions</p>
-          <p className="mt-3 font-display text-3xl text-ink">{portfolio.stats.revisionCount}</p>
+          <p className="mt-3 font-display text-3xl text-ink">{portfolio.outcomeStats.publishedCount}</p>
         </div>
       </section>
+
+      <StudentOutcomeLedger
+        outcomes={portfolio.outcomes}
+        pendingVerificationCount={portfolio.pendingVerificationCount}
+        submitAction={submitOutcomeProofAction}
+      />
 
       <section className="panel p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">

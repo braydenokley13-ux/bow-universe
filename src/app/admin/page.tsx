@@ -4,6 +4,7 @@ import { Badge } from "@/components/badge";
 import { AdminChallengeDesk } from "@/components/admin-challenge-desk";
 import { AdminClassCodeManager } from "@/components/admin-class-code-manager";
 import { AdminStudentMomentumDesk } from "@/components/admin-student-momentum-desk";
+import { AdminOutcomeReviewDesk } from "@/components/admin-outcome-review-desk";
 import { SectionHeading } from "@/components/section-heading";
 import { AdminDecisionDesk } from "@/components/admin-decision-desk";
 import { AdminGlossaryManager } from "@/components/admin-glossary-manager";
@@ -17,7 +18,9 @@ import {
   advanceSeasonAction,
   createStudentAccountAction,
   deleteGlossaryTermAction,
+  recordManualVerifiedImpactAction,
   recordDecisionAction,
+  reviewOutcomeAction,
   saveGlossaryTermAction,
   saveIssueAction,
   updateProposalStatusAction,
@@ -103,6 +106,13 @@ export default async function AdminPage({
             tone: decisionQueue.length > 0 ? "warn" : "success"
           },
           {
+            title: "Outcome review",
+            count: showcaseData.studentOutcomeQueue.totalPending,
+            detail: "Student evidence proof waiting for adult verification before it counts as a real outcome.",
+            href: "#outcome-review",
+            tone: showcaseData.studentOutcomeQueue.totalPending > 0 ? "warn" : "success"
+          },
+          {
             title: "Issue cleanup",
             count: issueCleanupQueue.length,
             detail: "High-pressure or incomplete issue records that still need evidence or metrics cleanup.",
@@ -186,6 +196,12 @@ export default async function AdminPage({
       />
 
       <AdminStudentMomentumDesk momentum={showcaseData.studentMomentum} />
+
+      <AdminOutcomeReviewDesk
+        queue={showcaseData.studentOutcomeQueue}
+        reviewAction={reviewOutcomeAction}
+        impactAction={recordManualVerifiedImpactAction}
+      />
 
       <AdminClassCodeManager
         action={createClassCodeAction}

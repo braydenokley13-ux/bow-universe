@@ -6,6 +6,7 @@ import { buildProjectIssueLinkCreates, resolveProjectPrimaryIssueId } from "@/li
 import { prisma } from "@/lib/prisma";
 import type { LaneTag, ReferenceEntry } from "@/lib/types";
 import { parseJsonText, parseStringList } from "@/lib/utils";
+import { syncProjectStudentOutcomes, syncProposalStudentOutcomes } from "@/server/student-outcomes";
 
 function asJson(value: unknown): Prisma.InputJsonValue {
   return value as Prisma.InputJsonValue;
@@ -215,6 +216,10 @@ export async function autosaveProjectDraft(params: {
         }
       });
 
+  await syncProjectStudentOutcomes({
+    projectId: saved.id
+  });
+
   return {
     id: saved.id,
     editUrl: `/projects/${saved.id}/edit`,
@@ -311,6 +316,10 @@ export async function autosaveProposalDraft(params: {
           publicationSlug: String(params.formData.get("publicationSlug") ?? "").trim() || null
         }
       });
+
+  await syncProposalStudentOutcomes({
+    proposalId: saved.id
+  });
 
   return {
     id: saved.id,

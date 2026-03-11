@@ -10,6 +10,7 @@ import {
   GradeBand,
   IssueStatus,
   Prisma,
+  PublicationSourceType,
   ProjectType,
   ProposalStatus,
   SubmissionStatus,
@@ -48,6 +49,13 @@ import {
   syncProjectPublication,
   syncProposalPublication
 } from "@/server/publications";
+import {
+  createManualVerifiedImpact,
+  reviewEvidenceOutcome,
+  submitEvidenceOutcomeProof,
+  syncProjectStudentOutcomes,
+  syncProposalStudentOutcomes
+} from "@/server/student-outcomes";
 import {
   advanceSeasonWorkflow,
   applyDecisionToPendingRuleSetWorkflow,
@@ -478,6 +486,9 @@ async function saveProjectRecord(params: {
     projectId: project.id,
     actorUserId: params.actor.id
   });
+  await syncProjectStudentOutcomes({
+    projectId: project.id
+  });
 
   return {
     project,
@@ -630,6 +641,9 @@ async function saveProposalRecord(params: {
   await syncProposalPublication({
     proposalId: proposal.id,
     actorUserId: params.actor.id
+  });
+  await syncProposalStudentOutcomes({
+    proposalId: proposal.id
   });
 
   return {
@@ -1003,6 +1017,110 @@ export async function saveProposalFeedbackAction(formData: FormData) {
   revalidatePath(`/proposals/${proposalId}`);
 }
 
+export async function submitOutcomeProofAction(formData: FormData) {
+  const viewer = await requireUser();
+  const sourceType = String(formData.get("sourceType") ?? "").trim() as PublicationSourceType;
+  const sourceId = String(formData.get("sourceId") ?? "").trim();
+  const artifactSummary = String(formData.get("artifactSummary") ?? "").trim();
+  const evidenceSummary = String(formData.get("evidenceSummary") ?? "").trim();
+  const studentReflection = String(formData.get("studentReflection") ?? "").trim();
+
+  if (
+    viewer.role !== "STUDENT" ||
+    !sourceId ||
+    !Object.values(PublicationSourceType).includes(sourceType)
+  ) {
+    return;
+  }
+
+  await submitEvidenceOutcomeProof({
+    userId: viewer.id,
+    sourceType,
+    sourceId,
+    artifactSummary,
+    evidenceSummary,
+    studentReflection
+  });
+
+  revalidatePath("/students/me");
+  revalidatePath("/");
+  if (sourceType === PublicationSourceType.PROJECT) {
+    revalidatePath(`/projects/${sourceId}`);
+    revalidatePath(`/projects/${sourceId}/edit`);
+  } else {
+    revalidatePath(`/proposals/${sourceId}`);
+    revalidatePath(`/proposals/${sourceId}/edit`);
+  }
+}
+
+export async function reviewOutcomeAction(formData: FormData) {
+  const viewer = await requireAdmin();
+  const outcomeId = String(formData.get("outcomeId") ?? "").trim();
+  const decision = String(formData.get("decision") ?? "").trim();
+  const reviewNote = String(formData.get("reviewNote") ?? "").trim();
+
+  if (!outcomeId || !["VERIFY", "REJECT"].includes(decision)) {
+    return;
+  }
+
+  const outcome = await prisma.studentOutcome.findUnique({
+    where: { id: outcomeId },
+    select: {
+      sourceType: true,
+      sourceId: true
+    }
+  });
+
+  if (!outcome) {
+    return;
+  }
+
+  await reviewEvidenceOutcome({
+    outcomeId,
+    reviewerId: viewer.id,
+    approve: decision === "VERIFY",
+    reviewNote
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/students/me");
+  if (outcome.sourceType === PublicationSourceType.PROJECT) {
+    revalidatePath(`/projects/${outcome.sourceId}`);
+    revalidatePath(`/projects/${outcome.sourceId}/edit`);
+  } else {
+    revalidatePath(`/proposals/${outcome.sourceId}`);
+    revalidatePath(`/proposals/${outcome.sourceId}/edit`);
+  }
+}
+
+export async function recordManualVerifiedImpactAction(formData: FormData) {
+  const viewer = await requireAdmin();
+  const sourceType = String(formData.get("sourceType") ?? "").trim() as PublicationSourceType;
+  const sourceId = String(formData.get("sourceId") ?? "").trim();
+  const reviewNote = String(formData.get("reviewNote") ?? "").trim();
+
+  if (!sourceId || !Object.values(PublicationSourceType).includes(sourceType)) {
+    return;
+  }
+
+  await createManualVerifiedImpact({
+    sourceType,
+    sourceId,
+    reviewerId: viewer.id,
+    reviewNote
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/students/me");
+  if (sourceType === PublicationSourceType.PROJECT) {
+    revalidatePath(`/projects/${sourceId}`);
+    revalidatePath(`/projects/${sourceId}/edit`);
+  } else {
+    revalidatePath(`/proposals/${sourceId}`);
+    revalidatePath(`/proposals/${sourceId}/edit`);
+  }
+}
+
 export async function reviewProjectAction(formData: FormData) {
   const viewer = await requireAdmin();
   const projectId = String(formData.get("projectId") ?? "").trim();
@@ -1037,6 +1155,9 @@ export async function reviewProjectAction(formData: FormData) {
   await syncProjectPublication({
     projectId,
     actorUserId: viewer.id
+  });
+  await syncProjectStudentOutcomes({
+    projectId
   });
 
   await syncChallengeMilestonesForSource({
@@ -1099,6 +1220,9 @@ export async function reviewProposalAction(formData: FormData) {
   await syncProposalPublication({
     proposalId,
     actorUserId: viewer.id
+  });
+  await syncProposalStudentOutcomes({
+    proposalId
   });
 
   await syncChallengeMilestonesForSource({
@@ -1505,6 +1629,9 @@ export async function updateProposalStatusAction(formData: FormData) {
   await syncProposalPublication({
     proposalId,
     actorUserId: viewer.id
+  });
+  await syncProposalStudentOutcomes({
+    proposalId
   });
 
   await syncChallengeMilestonesForSource({

@@ -3,11 +3,22 @@ import {
   ProposalStatus,
   PublicationSourceType,
   SubmissionStatus,
+  StudentOutcomeKind,
+  StudentOutcomeStatus,
   UserRole
 } from "@prisma/client";
 
 import { buildNewsroomFeed } from "@/lib/news";
 import { prisma } from "@/lib/prisma";
+import {
+  parseStudentOutcomeProof,
+  projectQualifiesForEvidenceOutcome,
+  proposalQualifiesForEvidenceOutcome,
+  sourceHref,
+  studentOutcomeKindLabels,
+  studentOutcomeOrder,
+  studentOutcomeStatusLabels
+} from "@/lib/student-outcomes";
 import {
   CURRENT_STUDENT_ONBOARDING_VERSION,
   parseStudentOnboardingProgress,
@@ -20,6 +31,7 @@ import {
   hasStudentSubmittedProject
 } from "@/lib/student-flow";
 import { buildChallengeLeaderboard, challengeIsOpen } from "@/server/challenges";
+import { syncStudentOutcomesForUser, syncStudentOutcomesForUsers } from "@/server/student-outcomes";
 
 const openProjectStatuses: SubmissionStatus[] = [
   SubmissionStatus.DRAFT,
@@ -52,6 +64,10 @@ function projectHref(projectId: string) {
 
 function proposalHref(proposalId: string) {
   return `/proposals/${proposalId}/edit`;
+}
+
+function outcomeSourceKey(sourceType: PublicationSourceType, sourceId: string) {
+  return `${sourceType}:${sourceId}`;
 }
 
 function daysSince(date: Date, now: Date) {
@@ -486,6 +502,13 @@ export async function getAdminShowcaseData() {
   ]);
 
   const studentIds = students.map((student) => student.id);
+
+  if (studentIds.length > 0) {
+    await syncStudentOutcomesForUsers({
+      userIds: studentIds
+    });
+  }
+
   const [studentProjects, studentProposals] = studentIds.length
     ? await Promise.all([
         prisma.project.findMany({
@@ -567,6 +590,105 @@ export async function getAdminShowcaseData() {
     existing.push(proposal);
     proposalsByStudent.set(proposal.createdByUserId, existing);
   }
+
+  const studentOutcomes = studentIds.length
+    ? await prisma.studentOutcome.findMany({
+        where: {
+          userId: {
+            in: studentIds
+          },
+          kind: {
+            in: [StudentOutcomeKind.EVIDENCE_DEFENDED, StudentOutcomeKind.VERIFIED_IMPACT]
+          }
+        },
+        include: {
+          user: {
+            select: {
+              id: true,
+              name: true
+            }
+          }
+        },
+        orderBy: [{ submittedAt: "asc" }, { createdAt: "desc" }]
+      })
+    : [];
+
+  const projectSourceMap = new Map(
+    studentProjects.map((project) => [
+      outcomeSourceKey(PublicationSourceType.PROJECT, project.id),
+      {
+        title: project.title,
+        href: projectHref(project.id)
+      }
+    ])
+  );
+  const proposalSourceMap = new Map(
+    studentProposals.map((proposal) => [
+      outcomeSourceKey(PublicationSourceType.PROPOSAL, proposal.id),
+      {
+        title: proposal.title,
+        href: proposalHref(proposal.id)
+      }
+    ])
+  );
+  const sourceMap = new Map([...projectSourceMap, ...proposalSourceMap]);
+  const verifiedImpactKeys = new Set(
+    studentOutcomes
+      .filter(
+        (outcome) =>
+          outcome.kind === StudentOutcomeKind.VERIFIED_IMPACT &&
+          outcome.status === StudentOutcomeStatus.VERIFIED
+      )
+      .map((outcome) => outcomeSourceKey(outcome.sourceType, outcome.sourceId))
+  );
+  const pendingEvidenceOutcomes = studentOutcomes
+    .filter(
+      (outcome) =>
+        outcome.kind === StudentOutcomeKind.EVIDENCE_DEFENDED &&
+        outcome.status === StudentOutcomeStatus.PENDING_VERIFICATION
+    )
+    .map((outcome) => {
+      const proof = parseStudentOutcomeProof(outcome.proofJson);
+      const source = sourceMap.get(outcomeSourceKey(outcome.sourceType, outcome.sourceId));
+
+      return {
+        id: outcome.id,
+        sourceType: outcome.sourceType,
+        sourceId: outcome.sourceId,
+        sourceTitle: source?.title ?? "Untitled source",
+        sourceHref: source?.href ?? sourceHref(outcome.sourceType, outcome.sourceId),
+        studentName: outcome.user.name,
+        submittedAt: outcome.submittedAt,
+        reviewNote: outcome.reviewNote,
+        artifactSummary: proof.artifactSummary,
+        evidenceSummary: proof.evidenceSummary,
+        studentReflection: proof.studentReflection,
+        evidenceCount: proof.evidenceCount
+      };
+    });
+  const impactCandidates = studentOutcomes
+    .filter(
+      (outcome) =>
+        outcome.kind === StudentOutcomeKind.EVIDENCE_DEFENDED &&
+        outcome.status === StudentOutcomeStatus.VERIFIED &&
+        !verifiedImpactKeys.has(outcomeSourceKey(outcome.sourceType, outcome.sourceId))
+    )
+    .map((outcome) => {
+      const source = sourceMap.get(outcomeSourceKey(outcome.sourceType, outcome.sourceId));
+      const proof = parseStudentOutcomeProof(outcome.proofJson);
+
+      return {
+        id: outcome.id,
+        sourceType: outcome.sourceType,
+        sourceId: outcome.sourceId,
+        sourceTitle: source?.title ?? "Untitled source",
+        sourceHref: source?.href ?? sourceHref(outcome.sourceType, outcome.sourceId),
+        studentName: outcome.user.name,
+        artifactSummary: proof.artifactSummary,
+        evidenceSummary: proof.evidenceSummary,
+        verifiedAt: outcome.verifiedAt
+      };
+    });
 
   const studentMomentum = {
     neverStarted: [] as Array<{
@@ -747,6 +869,12 @@ export async function getAdminShowcaseData() {
     studentMomentum: {
       ...studentMomentum,
       totalFlagged: totalFlaggedStudents
+    },
+    studentOutcomeQueue: {
+      pendingEvidenceOutcomes,
+      impactCandidates,
+      totalPending: pendingEvidenceOutcomes.length,
+      totalImpactCandidates: impactCandidates.length
     }
   };
 }
@@ -1087,7 +1215,11 @@ export async function getStudentMissionControlData(userId: string) {
 }
 
 export async function getStudentPortfolioData(userId: string) {
-  const [user, projects, proposals, challengeEntries] = await Promise.all([
+  await syncStudentOutcomesForUser({
+    userId
+  });
+
+  const [user, projects, proposals, challengeEntries, studentOutcomes] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       include: {
@@ -1142,6 +1274,10 @@ export async function getStudentPortfolioData(userId: string) {
         }
       },
       orderBy: { joinedAt: "desc" }
+    }),
+    prisma.studentOutcome.findMany({
+      where: { userId },
+      orderBy: [{ verifiedAt: "desc" }, { updatedAt: "desc" }]
     })
   ]);
 
@@ -1176,7 +1312,146 @@ export async function getStudentPortfolioData(userId: string) {
       ])
     : [[], []];
 
+  const sourceTitleMap = new Map<string, string>();
+  for (const project of projects) {
+    sourceTitleMap.set(outcomeSourceKey(PublicationSourceType.PROJECT, project.id), project.title);
+  }
+  for (const proposal of proposals) {
+    sourceTitleMap.set(outcomeSourceKey(PublicationSourceType.PROPOSAL, proposal.id), proposal.title);
+  }
+
+  const sourcePublicationMap = new Map<
+    string,
+    (typeof publications)[number]
+  >();
+  for (const publication of publications) {
+    sourcePublicationMap.set(outcomeSourceKey(publication.sourceType, publication.sourceId), publication);
+  }
+  const outcomesBySource = new Map<string, typeof studentOutcomes>();
+  for (const outcome of studentOutcomes) {
+    const key = outcomeSourceKey(outcome.sourceType, outcome.sourceId);
+    const existing = outcomesBySource.get(key) ?? [];
+    existing.push(outcome);
+    outcomesBySource.set(key, existing);
+  }
+
+  const outcomes = [
+    ...projects.map((project) => {
+      const key = outcomeSourceKey(PublicationSourceType.PROJECT, project.id);
+      const sourceOutcomes = outcomesBySource.get(key) ?? [];
+      const byKind = new Map(sourceOutcomes.map((outcome) => [outcome.kind, outcome]));
+      const evidenceOutcome = byKind.get(StudentOutcomeKind.EVIDENCE_DEFENDED) ?? null;
+
+      return {
+        sourceType: PublicationSourceType.PROJECT,
+        sourceId: project.id,
+        title: project.title,
+        href: projectHref(project.id),
+        issueTitle: project.primaryIssue?.title ?? null,
+        updatedAt: project.updatedAt,
+        publication: sourcePublicationMap.get(key)
+          ? {
+              slug: sourcePublicationMap.get(key)!.slug,
+              title: sourcePublicationMap.get(key)!.title
+            }
+          : null,
+        evidenceEligible: projectQualifiesForEvidenceOutcome(project),
+        canSubmitEvidenceProof:
+          projectQualifiesForEvidenceOutcome(project) &&
+          evidenceOutcome?.status !== StudentOutcomeStatus.PENDING_VERIFICATION &&
+          evidenceOutcome?.status !== StudentOutcomeStatus.VERIFIED,
+        outcomeStates: studentOutcomeOrder.map((kind) => {
+          const outcome = byKind.get(kind);
+          return {
+            id: outcome?.id ?? `${project.id}-${kind}`,
+            kind,
+            label: studentOutcomeKindLabels[kind],
+            status: outcome?.status ?? null,
+            statusLabel: outcome ? studentOutcomeStatusLabels[outcome.status] : "Not earned yet",
+            proof: parseStudentOutcomeProof(outcome?.proofJson),
+            reviewNote: outcome?.reviewNote ?? null,
+            submittedAt: outcome?.submittedAt ?? null,
+            verifiedAt: outcome?.verifiedAt ?? null
+          };
+        })
+      };
+    }),
+    ...proposals.map((proposal) => {
+      const key = outcomeSourceKey(PublicationSourceType.PROPOSAL, proposal.id);
+      const sourceOutcomes = outcomesBySource.get(key) ?? [];
+      const byKind = new Map(sourceOutcomes.map((outcome) => [outcome.kind, outcome]));
+      const evidenceOutcome = byKind.get(StudentOutcomeKind.EVIDENCE_DEFENDED) ?? null;
+
+      return {
+        sourceType: PublicationSourceType.PROPOSAL,
+        sourceId: proposal.id,
+        title: proposal.title,
+        href: proposalHref(proposal.id),
+        issueTitle: proposal.issue.title,
+        updatedAt: proposal.updatedAt,
+        publication: sourcePublicationMap.get(key)
+          ? {
+              slug: sourcePublicationMap.get(key)!.slug,
+              title: sourcePublicationMap.get(key)!.title
+            }
+          : null,
+        evidenceEligible: proposalQualifiesForEvidenceOutcome(proposal),
+        canSubmitEvidenceProof:
+          proposalQualifiesForEvidenceOutcome(proposal) &&
+          evidenceOutcome?.status !== StudentOutcomeStatus.PENDING_VERIFICATION &&
+          evidenceOutcome?.status !== StudentOutcomeStatus.VERIFIED,
+        outcomeStates: studentOutcomeOrder.map((kind) => {
+          const outcome = byKind.get(kind);
+          return {
+            id: outcome?.id ?? `${proposal.id}-${kind}`,
+            kind,
+            label: studentOutcomeKindLabels[kind],
+            status: outcome?.status ?? null,
+            statusLabel: outcome ? studentOutcomeStatusLabels[outcome.status] : "Not earned yet",
+            proof: parseStudentOutcomeProof(outcome?.proofJson),
+            reviewNote: outcome?.reviewNote ?? null,
+            submittedAt: outcome?.submittedAt ?? null,
+            verifiedAt: outcome?.verifiedAt ?? null
+          };
+        })
+      };
+    })
+  ]
+    .filter((entry) => entry.outcomeStates.some((state) => state.status !== null))
+    .sort((left, right) => right.updatedAt.getTime() - left.updatedAt.getTime());
+
+  const outcomeStats = {
+    realArtifacts: studentOutcomes.filter(
+      (outcome) =>
+        outcome.kind === StudentOutcomeKind.ARTIFACT_COMPLETED &&
+        outcome.status === StudentOutcomeStatus.VERIFIED
+    ).length,
+    evidenceBacked: studentOutcomes.filter(
+      (outcome) =>
+        outcome.kind === StudentOutcomeKind.EVIDENCE_DEFENDED &&
+        outcome.status === StudentOutcomeStatus.VERIFIED
+    ).length,
+    verifiedImpact: studentOutcomes.filter(
+      (outcome) =>
+        outcome.kind === StudentOutcomeKind.VERIFIED_IMPACT &&
+        outcome.status === StudentOutcomeStatus.VERIFIED
+    ).length,
+    publishedCount: publications.length
+  };
+  const pendingVerificationCount = studentOutcomes.filter(
+    (outcome) =>
+      outcome.kind === StudentOutcomeKind.EVIDENCE_DEFENDED &&
+      outcome.status === StudentOutcomeStatus.PENDING_VERIFICATION
+  ).length;
+
   const growthTimeline = [
+    ...studentOutcomes
+      .filter((outcome) => outcome.status !== StudentOutcomeStatus.DRAFT)
+      .map((outcome) => ({
+        id: outcome.id,
+        label: `${studentOutcomeKindLabels[outcome.kind]}: ${sourceTitleMap.get(outcomeSourceKey(outcome.sourceType, outcome.sourceId)) ?? "Untitled source"}`,
+        createdAt: outcome.verifiedAt ?? outcome.submittedAt ?? outcome.updatedAt
+      })),
     ...projects.flatMap((project) =>
       project.revisions.map((revision) => ({
         id: revision.id,
@@ -1218,18 +1493,9 @@ export async function getStudentPortfolioData(userId: string) {
       totalScore: entry.scoreEvents.reduce((total, event) => total + event.points, 0)
     })),
     growthTimeline,
-    stats: {
-      publishedCount: publications.length,
-      openCount:
-        projects.filter((project) => openProjectStatuses.includes(project.submissionStatus)).length +
-        proposals.filter((proposal) => openProposalStatuses.includes(proposal.status)).length,
-      feedbackCount:
-        projects.reduce((total, project) => total + project.feedbackEntries.length, 0) +
-        proposals.reduce((total, proposal) => total + proposal.feedbackEntries.length, 0),
-      revisionCount:
-        projects.reduce((total, project) => total + project.revisions.length, 0) +
-        proposals.reduce((total, proposal) => total + proposal.revisions.length, 0)
-    },
+    outcomes,
+    outcomeStats,
+    pendingVerificationCount,
     publishedProjects: projects.filter((project) => publishedProjectStatuses.includes(project.submissionStatus)),
     publishedProposals: proposals.filter((proposal) => publishedProposalStatuses.includes(proposal.status))
   };
