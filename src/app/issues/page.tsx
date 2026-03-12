@@ -6,6 +6,8 @@ import { SectionHeading } from "@/components/section-heading";
 import { buildIssueResearchPreview, classifyIssueWorkGap, summarizeIssuesFilter } from "@/lib/discovery-guidance";
 import { buildResearchStageDisplay } from "@/lib/research-stage";
 import { buildProjectStudioHref, buildProposalStudioHref } from "@/lib/studio-entry";
+import { runIssueIntel } from "@/server/ai/service";
+import { getViewer } from "@/server/auth";
 import { parseIssueMetrics, getIssuesPageData } from "@/server/data";
 
 function toneForSeverity(severity: number) {
@@ -21,9 +23,9 @@ function toneForSeverity(severity: number) {
 export default async function IssuesPage({
   searchParams
 }: {
-  searchParams?: Promise<{ status?: string; severity?: string }>;
+  searchParams?: Promise<{ status?: string; severity?: string; focus?: string }>;
 }) {
-  const issues = await getIssuesPageData();
+  const [issues, viewer] = await Promise.all([getIssuesPageData(), getViewer()]);
   const resolvedSearchParams = (await searchParams) ?? {};
   const issuesResearchMap = buildResearchStageDisplay("ASK_QUESTION", {
     previewStages: ["TEST_SYSTEM"],
@@ -33,6 +35,7 @@ export default async function IssuesPage({
   const severityBands = ["ALL", "4", "3", "2", "1"] as const;
   const selectedStatus = resolvedSearchParams.status ?? "ALL";
   const selectedSeverity = resolvedSearchParams.severity ?? "ALL";
+  const selectedFocus = resolvedSearchParams.focus ?? "";
   const filteredIssues = issues.filter((issue) => {
     const statusMatches = selectedStatus === "ALL" || issue.status === selectedStatus;
     const severityMatches =
@@ -40,6 +43,33 @@ export default async function IssuesPage({
 
     return statusMatches && severityMatches;
   });
+  const focusedIssue = filteredIssues.find((issue) => issue.id === selectedFocus) ?? null;
+  const focusedIssueIntel =
+    viewer && focusedIssue
+      ? await runIssueIntel({
+          userId: viewer.id,
+          issueId: focusedIssue.id
+        }).catch(() => null)
+      : null;
+
+  function buildIssueBoardHref(params: { status?: string; severity?: string; focus?: string }) {
+    const nextParams = new URLSearchParams();
+
+    if (params.status && params.status !== "ALL") {
+      nextParams.set("status", params.status);
+    }
+
+    if (params.severity && params.severity !== "ALL") {
+      nextParams.set("severity", params.severity);
+    }
+
+    if (params.focus) {
+      nextParams.set("focus", params.focus);
+    }
+
+    const query = nextParams.toString();
+    return query ? `/issues?${query}` : "/issues";
+  }
 
   return (
     <div className="space-y-8">
@@ -82,6 +112,68 @@ export default async function IssuesPage({
         simulationPreviewAvailable={issuesResearchMap.simulationPreviewAvailable}
         simulationPreviewLabel="You do not need full sandbox tools yet. First notice what part of the system this issue would be interesting to test later."
       />
+
+      {focusedIssue ? (
+        <section className="panel p-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Selected issue briefing</p>
+              <h3 className="mt-3 font-display text-2xl text-ink">{focusedIssue.title}</h3>
+              <p className="mt-2 text-sm leading-6 text-ink/70">
+                The deterministic card stays visible below. This panel adds the deeper AI read once a student chooses which issue to size up.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Badge tone={focusedIssueIntel ? "success" : "default"}>
+                {focusedIssueIntel ? "AI ready" : "Sign in for AI"}
+              </Badge>
+              <Link
+                href={`/issues/${focusedIssue.id}`}
+                className="rounded-full border border-line bg-white/80 px-4 py-2 text-sm font-medium text-ink"
+              >
+                Open issue page
+              </Link>
+            </div>
+          </div>
+
+          {focusedIssueIntel ? (
+            <div className="mt-6 grid gap-4 xl:grid-cols-2">
+              <div className="rounded-2xl border border-line bg-white/60 p-4">
+                <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">What is hard</p>
+                <ul className="mt-3 space-y-2 text-sm leading-6 text-ink/68">
+                  {focusedIssueIntel.data.whatIsHard.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+              <div className="rounded-2xl border border-line bg-white/60 p-4">
+                <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Real debate</p>
+                <p className="mt-3 text-sm leading-6 text-ink/68">{focusedIssueIntel.data.realDebate}</p>
+              </div>
+              <div className="rounded-2xl border border-line bg-white/60 p-4">
+                <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Stakeholders</p>
+                <ul className="mt-3 space-y-2 text-sm leading-6 text-ink/68">
+                  {focusedIssueIntel.data.stakeholders.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+              <div className="rounded-2xl border border-accent/20 bg-accent/5 p-4">
+                <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">First moves</p>
+                <ul className="mt-3 space-y-2 text-sm leading-6 text-ink/68">
+                  {focusedIssueIntel.data.firstMoves.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-6 rounded-2xl border border-dashed border-line px-4 py-5 text-sm leading-6 text-ink/60">
+              Sign in and choose an issue card to load the deeper AI briefing here.
+            </div>
+          )}
+        </section>
+      ) : null}
 
       <section className="space-y-4">
         {filteredIssues.length === 0 ? (
@@ -207,6 +299,16 @@ export default async function IssuesPage({
                   className="rounded-full border border-line bg-white/80 px-4 py-2 text-sm font-medium text-ink"
                 >
                   Open issue
+                </Link>
+                <Link
+                  href={buildIssueBoardHref({
+                    status: selectedStatus,
+                    severity: selectedSeverity,
+                    focus: issue.id
+                  })}
+                  className="rounded-full border border-line bg-white/80 px-4 py-2 text-sm font-medium text-ink"
+                >
+                  AI briefing
                 </Link>
               </div>
             </article>

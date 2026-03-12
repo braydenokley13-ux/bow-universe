@@ -23,6 +23,7 @@ import {
   ProjectStepReview
 } from "@/components/project-coach-steps";
 import { BeginnerEvidenceWizard } from "@/components/beginner-evidence-wizard";
+import { ProjectAiWorkspace } from "@/components/project-ai-workspace";
 import { WizardFooter } from "@/components/wizard-footer";
 import { WizardShell } from "@/components/wizard-shell";
 import { WizardStepRail } from "@/components/wizard-step-rail";
@@ -1150,235 +1151,266 @@ export function ProjectStudioForm({
       return null;
     }
 
+    const aiWorkspace = draftId.trim().length > 0 ? (
+      <ProjectAiWorkspace
+        projectId={draftId}
+        milestoneKey={milestone.key}
+        collaboratorCount={effectiveValues.collaboratorIds.length}
+        coreBuildDraft={deliverableDrafts.CORE_BUILD.contentMd}
+      />
+    ) : (
+      <section className="rounded-[28px] border border-line bg-white/80 p-5">
+        <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">AI guidance layer</p>
+        <p className="mt-3 text-sm leading-6 text-ink/68">
+          Save the campaign once, then the AI can read the real project record and help with orientation, argument pressure-testing, writing, and quality checks.
+        </p>
+      </section>
+    );
+
     if (milestone.key === ProjectMilestoneKey.CHARTER) {
       return (
-        <article className="panel overflow-hidden p-0">
-          <div className="bg-[linear-gradient(135deg,rgba(189,109,44,0.16),rgba(255,255,255,0.92))] p-6">
-            <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Milestone 1</p>
-            <h3 className="mt-3 font-display text-3xl text-ink">Write the campaign charter</h3>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-ink/72">
-              Lock the mission before the build gets big. This is the part that tells the student what they are trying to finish by launch week.
-            </p>
-          </div>
+        <div className="space-y-4">
+          <article className="panel overflow-hidden p-0">
+            <div className="bg-[linear-gradient(135deg,rgba(189,109,44,0.16),rgba(255,255,255,0.92))] p-6">
+              <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Milestone 1</p>
+              <h3 className="mt-3 font-display text-3xl text-ink">Write the campaign charter</h3>
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-ink/72">
+                Lock the mission before the build gets big. This is the part that tells the student what they are trying to finish by launch week.
+              </p>
+            </div>
 
-          <div className="grid gap-6 p-6 xl:grid-cols-[1.05fr_0.95fr]">
-            <div className="space-y-5">
-              <div>
-                <label htmlFor={getProjectCoachDomId("title")} className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">
-                  Project title
-                </label>
-                <input
-                  id={getProjectCoachDomId("title")}
-                  value={values.title}
-                  onChange={(event) => updateField("title", event.target.value)}
-                  className="mt-2 w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-base text-ink outline-none focus:border-accent"
-                />
+            <div className="grid gap-6 p-6 xl:grid-cols-[1.05fr_0.95fr]">
+              <div className="space-y-5">
+                <div>
+                  <label htmlFor={getProjectCoachDomId("title")} className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">
+                    Project title
+                  </label>
+                  <input
+                    id={getProjectCoachDomId("title")}
+                    value={values.title}
+                    onChange={(event) => updateField("title", event.target.value)}
+                    className="mt-2 w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-base text-ink outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div>
+                  <label htmlFor={getProjectCoachDomId("essentialQuestion")} className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">
+                    Driving question
+                  </label>
+                  <textarea
+                    id={getProjectCoachDomId("essentialQuestion")}
+                    value={values.essentialQuestion}
+                    onChange={(event) => updateField("essentialQuestion", event.target.value)}
+                    className="mt-2 min-h-[140px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">
+                    Artifact focus
+                  </label>
+                  <div className="mt-2 grid gap-3 md:grid-cols-3">
+                    {Object.values(ProjectArtifactFocus).map((focus) => (
+                      <button
+                        key={focus}
+                        type="button"
+                        onClick={() => setArtifactFocus(focus)}
+                        className={`rounded-[22px] border p-4 text-left transition ${
+                          artifactFocus === focus
+                            ? "border-accent bg-accent/10 shadow-panel"
+                            : "border-line bg-white/75 hover:border-accent/35"
+                        }`}
+                      >
+                        <p className="font-medium text-ink">{projectArtifactFocusLabels[focus]}</p>
+                        <p className="mt-2 text-sm leading-6 text-ink/65">
+                          {focus === ProjectArtifactFocus.RESEARCH
+                            ? "Investigate the pattern and make the case."
+                            : focus === ProjectArtifactFocus.TOOL
+                              ? "Build something useful that helps the league think."
+                              : "Make a real strategy plan with moves and risks."}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <label htmlFor={getProjectCoachDomId("essentialQuestion")} className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">
-                  Driving question
-                </label>
-                <textarea
-                  id={getProjectCoachDomId("essentialQuestion")}
-                  value={values.essentialQuestion}
-                  onChange={(event) => updateField("essentialQuestion", event.target.value)}
-                  className="mt-2 min-h-[140px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-                />
-              </div>
+              <div className="space-y-5">
+                <div>
+                  <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Mission goal</label>
+                  <textarea
+                    value={missionGoal}
+                    onChange={(event) => setMissionGoal(event.target.value)}
+                    className="mt-2 min-h-[120px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
+                  />
+                </div>
 
-              <div>
-                <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">
-                  Artifact focus
-                </label>
-                <div className="mt-2 grid gap-3 md:grid-cols-3">
-                  {Object.values(ProjectArtifactFocus).map((focus) => (
-                    <button
-                      key={focus}
-                      type="button"
-                      onClick={() => setArtifactFocus(focus)}
-                      className={`rounded-[22px] border p-4 text-left transition ${
-                        artifactFocus === focus
-                          ? "border-accent bg-accent/10 shadow-panel"
-                          : "border-line bg-white/75 hover:border-accent/35"
-                      }`}
-                    >
-                      <p className="font-medium text-ink">{projectArtifactFocusLabels[focus]}</p>
-                      <p className="mt-2 text-sm leading-6 text-ink/65">
-                        {focus === ProjectArtifactFocus.RESEARCH
-                          ? "Investigate the pattern and make the case."
-                          : focus === ProjectArtifactFocus.TOOL
-                            ? "Build something useful that helps the league think."
-                            : "Make a real strategy plan with moves and risks."}
-                      </p>
-                    </button>
-                  ))}
+                <div>
+                  <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Success criteria</label>
+                  <textarea
+                    value={successCriteria}
+                    onChange={(event) => setSuccessCriteria(event.target.value)}
+                    className="mt-2 min-h-[120px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
+                  />
+                </div>
+
+                <div>
+                  <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Target launch date</label>
+                  <input
+                    type="date"
+                    value={targetLaunchDate}
+                    onChange={(event) => setTargetLaunchDate(event.target.value)}
+                    className="mt-2 w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
+                  />
                 </div>
               </div>
             </div>
-
-            <div className="space-y-5">
-              <div>
-                <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Mission goal</label>
-                <textarea
-                  value={missionGoal}
-                  onChange={(event) => setMissionGoal(event.target.value)}
-                  className="mt-2 min-h-[120px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-                />
-              </div>
-
-              <div>
-                <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Success criteria</label>
-                <textarea
-                  value={successCriteria}
-                  onChange={(event) => setSuccessCriteria(event.target.value)}
-                  className="mt-2 min-h-[120px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-                />
-              </div>
-
-              <div>
-                <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Target launch date</label>
-                <input
-                  type="date"
-                  value={targetLaunchDate}
-                  onChange={(event) => setTargetLaunchDate(event.target.value)}
-                  className="mt-2 w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent"
-                />
-              </div>
-            </div>
-          </div>
-        </article>
+          </article>
+          {aiWorkspace}
+        </div>
       );
     }
 
     if (milestone.key === ProjectMilestoneKey.EVIDENCE_BOARD) {
       return (
-        <article className="panel p-6">
-          <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Milestone 2</p>
-          <h3 className="mt-3 font-display text-3xl text-ink">Build the evidence board</h3>
-          <div className="mt-6 grid gap-5 xl:grid-cols-2">
-            <div>
-              <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Short summary</label>
-              <textarea value={values.summary} onChange={(event) => updateField("summary", event.target.value)} className="mt-2 min-h-[110px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+        <div className="space-y-4">
+          <article className="panel p-6">
+            <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Milestone 2</p>
+            <h3 className="mt-3 font-display text-3xl text-ink">Build the evidence board</h3>
+            <div className="mt-6 grid gap-5 xl:grid-cols-2">
+              <div>
+                <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Short summary</label>
+                <textarea value={values.summary} onChange={(event) => updateField("summary", event.target.value)} className="mt-2 min-h-[110px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+              </div>
+              <div>
+                <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Abstract</label>
+                <textarea value={values.abstract} onChange={(event) => updateField("abstract", event.target.value)} className="mt-2 min-h-[110px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+              </div>
+              <div>
+                <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Dossier opening</label>
+                <textarea value={values.overview} onChange={(event) => updateField("overview", event.target.value)} className="mt-2 min-h-[150px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+              </div>
+              <div>
+                <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Why it matters now</label>
+                <textarea value={values.context} onChange={(event) => updateField("context", event.target.value)} className="mt-2 min-h-[150px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+              </div>
             </div>
-            <div>
-              <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Abstract</label>
-              <textarea value={values.abstract} onChange={(event) => updateField("abstract", event.target.value)} className="mt-2 min-h-[110px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+            <div className="mt-5">
+              <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Evidence notes</label>
+              <textarea value={values.evidence} onChange={(event) => updateField("evidence", event.target.value)} className="mt-2 min-h-[220px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
             </div>
-            <div>
-              <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Dossier opening</label>
-              <textarea value={values.overview} onChange={(event) => updateField("overview", event.target.value)} className="mt-2 min-h-[150px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+            <div className="mt-5">
+              <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Sources</label>
+              <textarea value={values.references} onChange={(event) => updateField("references", event.target.value)} className="mt-2 min-h-[160px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
             </div>
-            <div>
-              <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Why it matters now</label>
-              <textarea value={values.context} onChange={(event) => updateField("context", event.target.value)} className="mt-2 min-h-[150px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
-            </div>
-          </div>
-          <div className="mt-5">
-            <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Evidence notes</label>
-            <textarea value={values.evidence} onChange={(event) => updateField("evidence", event.target.value)} className="mt-2 min-h-[220px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
-          </div>
-          <div className="mt-5">
-            <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Sources</label>
-            <textarea value={values.references} onChange={(event) => updateField("references", event.target.value)} className="mt-2 min-h-[160px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
-          </div>
-        </article>
+          </article>
+          {aiWorkspace}
+        </div>
       );
     }
 
     if (milestone.key === ProjectMilestoneKey.BUILD_SPRINT) {
       return (
-        <article className="panel p-6">
-          <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Milestone 3</p>
-          <h3 className="mt-3 font-display text-3xl text-ink">Run the build sprint</h3>
-          <div className="mt-6 grid gap-5 xl:grid-cols-2">
-            <div>
-              <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Method or process</label>
-              <textarea value={values.methodsSummary} onChange={(event) => updateField("methodsSummary", event.target.value)} className="mt-2 min-h-[150px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+        <div className="space-y-4">
+          <article className="panel p-6">
+            <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Milestone 3</p>
+            <h3 className="mt-3 font-display text-3xl text-ink">Run the build sprint</h3>
+            <div className="mt-6 grid gap-5 xl:grid-cols-2">
+              <div>
+                <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Method or process</label>
+                <textarea value={values.methodsSummary} onChange={(event) => updateField("methodsSummary", event.target.value)} className="mt-2 min-h-[150px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+              </div>
+              <div>
+                <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Core build notes</label>
+                <textarea value={deliverableDrafts.CORE_BUILD.contentMd} onChange={(event) => updateDeliverableDraft(ProjectDeliverableKey.CORE_BUILD, "contentMd", event.target.value)} className="mt-2 min-h-[150px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+              </div>
             </div>
-            <div>
-              <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Core build notes</label>
-              <textarea value={deliverableDrafts.CORE_BUILD.contentMd} onChange={(event) => updateDeliverableDraft(ProjectDeliverableKey.CORE_BUILD, "contentMd", event.target.value)} className="mt-2 min-h-[150px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+            <div className="mt-5">
+              <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Analysis</label>
+              <textarea value={values.analysis} onChange={(event) => updateField("analysis", event.target.value)} className="mt-2 min-h-[180px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
             </div>
-          </div>
-          <div className="mt-5">
-            <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Analysis</label>
-            <textarea value={values.analysis} onChange={(event) => updateField("analysis", event.target.value)} className="mt-2 min-h-[180px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
-          </div>
-          <div className="mt-5">
-            <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Recommendation or move</label>
-            <textarea value={values.recommendations} onChange={(event) => updateField("recommendations", event.target.value)} className="mt-2 min-h-[160px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
-          </div>
-          <div className="mt-5 grid gap-5 xl:grid-cols-2">
-            <div>
-              <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Core artifact URL</label>
-              <input value={deliverableDrafts.CORE_BUILD.artifactUrl} onChange={(event) => updateDeliverableDraft(ProjectDeliverableKey.CORE_BUILD, "artifactUrl", event.target.value)} className="mt-2 w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+            <div className="mt-5">
+              <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Recommendation or move</label>
+              <textarea value={values.recommendations} onChange={(event) => updateField("recommendations", event.target.value)} className="mt-2 min-h-[160px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
             </div>
-            <div>
-              <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Artifact links</label>
-              <textarea value={values.artifactLinks} onChange={(event) => updateField("artifactLinks", event.target.value)} className="mt-2 min-h-[120px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+            <div className="mt-5 grid gap-5 xl:grid-cols-2">
+              <div>
+                <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Core artifact URL</label>
+                <input value={deliverableDrafts.CORE_BUILD.artifactUrl} onChange={(event) => updateDeliverableDraft(ProjectDeliverableKey.CORE_BUILD, "artifactUrl", event.target.value)} className="mt-2 w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+              </div>
+              <div>
+                <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Artifact links</label>
+                <textarea value={values.artifactLinks} onChange={(event) => updateField("artifactLinks", event.target.value)} className="mt-2 min-h-[120px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+              </div>
             </div>
-          </div>
-        </article>
+          </article>
+          {aiWorkspace}
+        </div>
       );
     }
 
     if (milestone.key === ProjectMilestoneKey.FEEDBACK_LOOP) {
       return (
-        <article className="panel p-6">
-          <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Milestone 4</p>
-          <h3 className="mt-3 font-display text-3xl text-ink">Run the feedback loop</h3>
-          {repairItems.length > 0 ? (
-            <div className="mt-6 grid gap-3">
-              {repairItems.map((item) => (
-                <div key={item.id} className="rounded-[22px] border border-warn/30 bg-warn/10 p-4 text-sm leading-6 text-ink/72">
-                  <p className="font-medium text-ink">{item.sectionKey}</p>
-                  <p className="mt-2">{item.body}</p>
-                </div>
-              ))}
+        <div className="space-y-4">
+          <article className="panel p-6">
+            <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Milestone 4</p>
+            <h3 className="mt-3 font-display text-3xl text-ink">Run the feedback loop</h3>
+            {repairItems.length > 0 ? (
+              <div className="mt-6 grid gap-3">
+                {repairItems.map((item) => (
+                  <div key={item.id} className="rounded-[22px] border border-warn/30 bg-warn/10 p-4 text-sm leading-6 text-ink/72">
+                    <p className="font-medium text-ink">{item.sectionKey}</p>
+                    <p className="mt-2">{item.body}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-6 rounded-[22px] border border-dashed border-line px-4 py-5 text-sm leading-6 text-ink/60">
+                Feedback will appear here after review notes are added.
+              </div>
+            )}
+            <div className="mt-6">
+              <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Revision log</label>
+              <textarea value={deliverableDrafts.REVISION_LOG.contentMd} onChange={(event) => updateDeliverableDraft(ProjectDeliverableKey.REVISION_LOG, "contentMd", event.target.value)} className="mt-2 min-h-[180px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
             </div>
-          ) : (
-            <div className="mt-6 rounded-[22px] border border-dashed border-line px-4 py-5 text-sm leading-6 text-ink/60">
-              Feedback will appear here after review notes are added.
+            <div className="mt-5">
+              <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Reflection</label>
+              <textarea value={values.reflection} onChange={(event) => updateField("reflection", event.target.value)} className="mt-2 min-h-[180px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
             </div>
-          )}
-          <div className="mt-6">
-            <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Revision log</label>
-            <textarea value={deliverableDrafts.REVISION_LOG.contentMd} onChange={(event) => updateDeliverableDraft(ProjectDeliverableKey.REVISION_LOG, "contentMd", event.target.value)} className="mt-2 min-h-[180px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
-          </div>
-          <div className="mt-5">
-            <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Reflection</label>
-            <textarea value={values.reflection} onChange={(event) => updateField("reflection", event.target.value)} className="mt-2 min-h-[180px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
-          </div>
-        </article>
+          </article>
+          {aiWorkspace}
+        </div>
       );
     }
 
     return (
-      <article className="panel p-6">
-        <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Milestone 5</p>
-        <h3 className="mt-3 font-display text-3xl text-ink">Stage launch week</h3>
-        <div className="mt-6 grid gap-5 xl:grid-cols-2">
-          <div>
-            <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Key takeaways</label>
-            <textarea value={values.keyTakeaways} onChange={(event) => updateField("keyTakeaways", event.target.value)} className="mt-2 min-h-[160px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+      <div className="space-y-4">
+        <article className="panel p-6">
+          <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Milestone 5</p>
+          <h3 className="mt-3 font-display text-3xl text-ink">Stage launch week</h3>
+          <div className="mt-6 grid gap-5 xl:grid-cols-2">
+            <div>
+              <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Key takeaways</label>
+              <textarea value={values.keyTakeaways} onChange={(event) => updateField("keyTakeaways", event.target.value)} className="mt-2 min-h-[160px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+            </div>
+            <div>
+              <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Launch deck</label>
+              <textarea value={deliverableDrafts.LAUNCH_DECK.contentMd} onChange={(event) => updateDeliverableDraft(ProjectDeliverableKey.LAUNCH_DECK, "contentMd", event.target.value)} className="mt-2 min-h-[160px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+            </div>
           </div>
-          <div>
-            <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Launch deck</label>
-            <textarea value={deliverableDrafts.LAUNCH_DECK.contentMd} onChange={(event) => updateDeliverableDraft(ProjectDeliverableKey.LAUNCH_DECK, "contentMd", event.target.value)} className="mt-2 min-h-[160px] w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+          <div className="mt-5 grid gap-5 xl:grid-cols-2">
+            <div>
+              <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Launch deck link</label>
+              <input value={deliverableDrafts.LAUNCH_DECK.artifactUrl} onChange={(event) => updateDeliverableDraft(ProjectDeliverableKey.LAUNCH_DECK, "artifactUrl", event.target.value)} className="mt-2 w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+            </div>
+            <div>
+              <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Publication slug</label>
+              <input value={values.publicationSlug} onChange={(event) => updateField("publicationSlug", event.target.value)} className="mt-2 w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
+            </div>
           </div>
-        </div>
-        <div className="mt-5 grid gap-5 xl:grid-cols-2">
-          <div>
-            <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Launch deck link</label>
-            <input value={deliverableDrafts.LAUNCH_DECK.artifactUrl} onChange={(event) => updateDeliverableDraft(ProjectDeliverableKey.LAUNCH_DECK, "artifactUrl", event.target.value)} className="mt-2 w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
-          </div>
-          <div>
-            <label className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Publication slug</label>
-            <input value={values.publicationSlug} onChange={(event) => updateField("publicationSlug", event.target.value)} className="mt-2 w-full rounded-[22px] border border-line bg-white/85 px-4 py-3 text-sm text-ink outline-none focus:border-accent" />
-          </div>
-        </div>
-      </article>
+        </article>
+        {aiWorkspace}
+      </div>
     );
   }
 

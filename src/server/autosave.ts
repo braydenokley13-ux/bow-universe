@@ -21,7 +21,14 @@ import { buildProjectIssueLinkCreates, resolveProjectPrimaryIssueId } from "@/li
 import { prisma } from "@/lib/prisma";
 import type { LaneTag, ReferenceEntry } from "@/lib/types";
 import { parseJsonText, parseStringList } from "@/lib/utils";
-import { syncProjectCampaignState } from "@/server/project-campaign";
+import { canUserEditProjectDraft } from "@/server/project-access";
+import {
+  syncProjectAiCampaignState,
+} from "@/server/ai/service";
+import {
+  createProjectCampaignProgressEvent,
+  syncProjectCampaignState
+} from "@/server/project-campaign";
 import { syncProjectStudentOutcomes, syncProposalStudentOutcomes } from "@/server/student-outcomes";
 
 function asJson(value: unknown): Prisma.InputJsonValue {
@@ -177,6 +184,7 @@ function parseProjectContent(formData: FormData, summary: string, essentialQuest
 export async function autosaveProjectDraft(params: {
   formData: FormData;
   actorUserId: string;
+  actorRole: "STUDENT" | "ADMIN";
 }) {
   const projectId = String(params.formData.get("projectId") ?? "").trim();
   const existing = projectId
@@ -194,7 +202,10 @@ export async function autosaveProjectDraft(params: {
       })
     : null;
 
-  if (existing && existing.createdByUserId !== params.actorUserId) {
+  if (
+    existing &&
+    !canUserEditProjectDraft(existing, params.actorUserId, params.actorRole)
+  ) {
     throw new Error("You can only autosave your own project drafts.");
   }
 
@@ -330,42 +341,58 @@ export async function autosaveProjectDraft(params: {
         }
       });
 
+  const campaignAssessment = buildProjectCampaignAssessment({
+    scale: projectScale,
+    artifactFocus,
+    issueId,
+    issueSeverity: null,
+    title,
+    summary,
+    abstract,
+    essentialQuestion,
+    methodsSummary,
+    overview: content.overview,
+    context: content.context,
+    evidence: content.evidence,
+    analysis: content.analysis,
+    recommendations: content.recommendations,
+    reflection: content.reflection,
+    missionGoal: missionGoal ?? "",
+    successCriteria: successCriteria ?? "",
+    targetLaunchDate,
+    keyTakeaways,
+    artifactLinks,
+    references,
+    laneSections: content.laneSections,
+    feedbackCount: existing?._count.feedbackEntries ?? 0,
+    milestoneInputs: campaignMilestones,
+    deliverableInputs: campaignDeliverables
+  });
+
   await syncProjectCampaignState({
     db: prisma,
     projectId: saved.id,
     scale: projectScale,
-    assessment: buildProjectCampaignAssessment({
-      scale: projectScale,
-      artifactFocus,
-      issueId,
-      issueSeverity: null,
-      title,
-      summary,
-      abstract,
-      essentialQuestion,
-      methodsSummary,
-      overview: content.overview,
-      context: content.context,
-      evidence: content.evidence,
-      analysis: content.analysis,
-      recommendations: content.recommendations,
-      reflection: content.reflection,
-      missionGoal: missionGoal ?? "",
-      successCriteria: successCriteria ?? "",
-      targetLaunchDate,
-      keyTakeaways,
-      artifactLinks,
-      references,
-      laneSections: content.laneSections,
-      feedbackCount: existing?._count.feedbackEntries ?? 0,
-      milestoneInputs: campaignMilestones,
-      deliverableInputs: campaignDeliverables
-    })
+    assessment: campaignAssessment
   });
+
+  if (projectScale === ProjectScale.EXTENDED) {
+    await createProjectCampaignProgressEvent({
+      db: prisma,
+      projectId: saved.id,
+      milestoneKey: campaignAssessment.activeMilestoneKey,
+      actorUserId: params.actorUserId,
+      body: "Saved project progress in the campaign workspace."
+    });
+  }
 
   await syncProjectStudentOutcomes({
     projectId: saved.id
   });
+
+  if (projectScale === ProjectScale.EXTENDED) {
+    await syncProjectAiCampaignState(saved.id);
+  }
 
   return {
     id: saved.id,

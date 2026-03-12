@@ -166,4 +166,106 @@ describe("project campaign helpers", () => {
         ?.complete
     ).toBe(true);
   });
+
+  it("keeps the build sprint locked until the AI evidence gates are cleared", () => {
+    const assessment = buildProjectCampaignAssessment({
+      ...buildExtendedInput(),
+      issueId: "issue-1",
+      title: longText("Revenue concentration mission", 3),
+      summary: longText("Summary", 5),
+      abstract: longText("Abstract", 8),
+      essentialQuestion: longText("How should the league respond to the evidence", 3),
+      missionGoal: longText("Mission goal", 6),
+      successCriteria: longText("Success criteria", 8),
+      targetLaunchDate: new Date("2026-04-10T12:00:00.000Z"),
+      overview: longText("Overview", 6),
+      context: longText("Context", 6),
+      evidence: longText("Evidence", 10),
+      references: [
+        {
+          label: "League memo",
+          url: "https://example.com/memo",
+          sourceType: "OTHER"
+        }
+      ],
+      aiReadiness: {
+        researchFresh: true,
+        argumentFresh: true,
+        adversaryPassed: false,
+        qualityPassed: false
+      }
+    });
+
+    expect(assessment.activeMilestoneKey).toBe(ProjectMilestoneKey.EVIDENCE_BOARD);
+    expect(
+      assessment.milestones.find((milestone) => milestone.key === ProjectMilestoneKey.EVIDENCE_BOARD)
+        ?.missingItems
+    ).toContain("Clear the adversarial mentor before the build sprint unlocks.");
+  });
+
+  it("adds the AI quality gate as a launch-week blocker until the suite passes", () => {
+    const assessment = buildProjectCampaignAssessment({
+      ...buildExtendedInput(),
+      issueId: "issue-1",
+      title: longText("Revenue concentration mission", 3),
+      summary: longText("Summary", 5),
+      abstract: longText("Abstract", 8),
+      essentialQuestion: longText("How should the league respond to the evidence", 3),
+      methodsSummary: longText("Methods", 6),
+      overview: longText("Overview", 6),
+      context: longText("Context", 6),
+      evidence: longText("Evidence", 10),
+      analysis: longText("Analysis", 8),
+      recommendations: longText("Recommendation", 6),
+      reflection: longText("Reflection", 6),
+      missionGoal: longText("Mission goal", 6),
+      successCriteria: longText("Success criteria", 8),
+      targetLaunchDate: new Date("2026-04-10T12:00:00.000Z"),
+      keyTakeaways: [longText("Takeaway one", 3), longText("Takeaway two", 3)],
+      references: [
+        {
+          label: "League memo",
+          url: "https://example.com/memo",
+          sourceType: "OTHER"
+        }
+      ],
+      laneSections: [
+        {
+          key: "model",
+          title: "Model",
+          prompt: "What is the model doing?",
+          value: longText("Lane section build", 8)
+        }
+      ],
+      feedbackCount: 1,
+      deliverableInputs: [
+        {
+          key: ProjectDeliverableKey.CORE_BUILD,
+          contentMd: longText("Core build draft", 8),
+          artifactUrl: "https://example.com/tool"
+        },
+        {
+          key: ProjectDeliverableKey.REVISION_LOG,
+          contentMd: longText("Revision log", 8)
+        },
+        {
+          key: ProjectDeliverableKey.LAUNCH_DECK,
+          contentMd: longText("Launch deck", 8),
+          artifactUrl: "https://example.com/deck"
+        }
+      ],
+      aiReadiness: {
+        researchFresh: true,
+        argumentFresh: true,
+        adversaryPassed: true,
+        qualityPassed: false
+      }
+    });
+
+    expect(assessment.launchReady).toBe(false);
+    expect(
+      assessment.milestones.find((milestone) => milestone.key === ProjectMilestoneKey.LAUNCH_WEEK)
+        ?.missingItems
+    ).toContain("Clear the AI quality gate on the current artifact suite.");
+  });
 });

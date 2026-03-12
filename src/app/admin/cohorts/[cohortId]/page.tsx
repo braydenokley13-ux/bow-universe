@@ -33,6 +33,9 @@ export default async function CohortDetailPage({
 
   const memberIds = new Set(cohort.members.map((m) => m.userId));
   const nonMembers = users.filter((u) => u.role === "STUDENT" && !memberIds.has(u.id));
+  const stalledRows = progress.rows.filter((row) => row.hasActiveStallSignal);
+  const teamRiskRows = progress.rows.filter((row) => row.hasUnresolvedTeamPulse);
+  const activeCampaignRows = progress.rows.filter((row) => row.activeMilestoneKey);
 
   return (
     <div className="space-y-8">
@@ -69,6 +72,81 @@ export default async function CohortDetailPage({
           </button>
         </form>
       </div>
+
+      <section className="panel p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Attention</p>
+            <h3 className="mt-3 font-display text-2xl text-ink">What needs a teacher look right now</h3>
+            <p className="mt-2 text-sm leading-6 text-ink/70">
+              These are summary signals only. Team prompts stay inside the student workspace.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Badge tone={stalledRows.length > 0 ? "warn" : "success"}>
+              {stalledRows.length} stalled
+            </Badge>
+            <Badge tone={teamRiskRows.length > 0 ? "warn" : "success"}>
+              {teamRiskRows.length} team risks
+            </Badge>
+            <Badge>{activeCampaignRows.length} active campaigns</Badge>
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-4 md:grid-cols-3">
+          <div className="rounded-2xl border border-line bg-white/60 p-4">
+            <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Stall alerts</p>
+            <div className="mt-3 space-y-3">
+              {stalledRows.length > 0 ? (
+                stalledRows.map((row) => (
+                  <Link key={`stall-${row.user.id}`} href={row.activeProjectId ? `/projects/${row.activeProjectId}` : "#"} className="block rounded-2xl border border-line bg-white/80 px-3 py-3 hover:border-accent">
+                    <p className="font-medium text-ink">{row.user.name}</p>
+                    <p className="mt-1 text-sm text-ink/62">
+                      {row.activeMilestoneKey ? row.activeMilestoneKey.toLowerCase().replaceAll("_", " ") : "campaign"}
+                    </p>
+                  </Link>
+                ))
+              ) : (
+                <p className="text-sm leading-6 text-ink/60">No active stall signals right now.</p>
+              )}
+            </div>
+          </div>
+          <div className="rounded-2xl border border-line bg-white/60 p-4">
+            <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Team pulse risk</p>
+            <div className="mt-3 space-y-3">
+              {teamRiskRows.length > 0 ? (
+                teamRiskRows.map((row) => (
+                  <Link key={`team-${row.user.id}`} href={row.activeProjectId ? `/projects/${row.activeProjectId}` : "#"} className="block rounded-2xl border border-line bg-white/80 px-3 py-3 hover:border-accent">
+                    <p className="font-medium text-ink">{row.user.name}</p>
+                    <p className="mt-1 text-sm text-ink/62">{row.activeProjectTitle ?? "Active campaign"}</p>
+                  </Link>
+                ))
+              ) : (
+                <p className="text-sm leading-6 text-ink/60">No unresolved team balance risks right now.</p>
+              )}
+            </div>
+          </div>
+          <div className="rounded-2xl border border-line bg-white/60 p-4">
+            <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Recent human progress</p>
+            <div className="mt-3 space-y-3">
+              {activeCampaignRows.length > 0 ? (
+                activeCampaignRows.slice(0, 5).map((row) => (
+                  <div key={`progress-${row.user.id}`} className="rounded-2xl border border-line bg-white/80 px-3 py-3">
+                    <p className="font-medium text-ink">{row.user.name}</p>
+                    <p className="mt-1 text-sm text-ink/62">
+                      {row.lastHumanProgressAt
+                        ? row.lastHumanProgressAt.toLocaleDateString("en-US")
+                        : "No logged human progress yet"}
+                    </p>
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm leading-6 text-ink/60">No active campaign projects yet.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
 
       {/* Milestones */}
       <section className="panel p-6">

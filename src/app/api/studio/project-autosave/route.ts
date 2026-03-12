@@ -15,7 +15,8 @@ export async function POST(request: Request) {
     const formData = await request.formData();
     const result = await autosaveProjectDraft({
       formData,
-      actorUserId: session.user.id
+      actorUserId: session.user.id,
+      actorRole: session.user.role ?? "STUDENT"
     });
 
     return NextResponse.json(result);

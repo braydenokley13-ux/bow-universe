@@ -99,7 +99,13 @@ export async function snapshotProjectRevision(params: {
     where: { id: params.projectId },
     include: {
       issueLinks: true,
-      collaborators: true
+      collaborators: true,
+      milestones: {
+        orderBy: { targetDate: "asc" }
+      },
+      deliverables: {
+        orderBy: { key: "asc" }
+      }
     }
   });
 
@@ -127,7 +133,25 @@ export async function snapshotProjectRevision(params: {
         artifactLinksJson: project.artifactLinksJson,
         findingsMd: project.findingsMd,
         issueIds: project.issueLinks.map((link) => link.issueId),
-        collaboratorIds: project.collaborators.map((collaborator) => collaborator.userId)
+        collaboratorIds: project.collaborators.map((collaborator) => collaborator.userId),
+        milestones: project.milestones.map((milestone) => ({
+          key: milestone.key,
+          title: milestone.title,
+          status: milestone.status,
+          targetDate: milestone.targetDate,
+          completedAt: milestone.completedAt,
+          completionNote: milestone.completionNote
+        })),
+        deliverables: project.deliverables.map((deliverable) => ({
+          key: deliverable.key,
+          title: deliverable.title,
+          required: deliverable.required,
+          complete: deliverable.complete,
+          contentMd: deliverable.contentMd,
+          artifactUrl: deliverable.artifactUrl,
+          completedAt: deliverable.completedAt,
+          metadataJson: deliverable.metadataJson
+        }))
       })
     }
   });

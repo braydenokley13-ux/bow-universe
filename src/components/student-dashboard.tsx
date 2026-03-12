@@ -72,6 +72,15 @@ type RecommendedAction = {
   ctaLabel: string;
 };
 
+type DailyMission = {
+  title: string;
+  body: string;
+  reason: string;
+  ctaLabel: string;
+  href: string;
+  milestoneKey?: string | null;
+};
+
 type LeagueMetrics = {
   currentSeason: { year: number; activeRuleSet: { version: number } } | null;
   metrics: {
@@ -105,6 +114,7 @@ type StudentDashboardProps = {
   researchStageProgress: ResearchStageStep[];
   nextResearchStep: ResearchStageNextStep;
   simulationPreviewAvailable: boolean;
+  dailyMission: DailyMission | null;
   league: LeagueMetrics;
 };
 
@@ -144,12 +154,14 @@ export function StudentDashboard({
   researchStageProgress,
   nextResearchStep,
   simulationPreviewAvailable,
+  dailyMission,
   league
 }: StudentDashboardProps) {
   const totalOpen = openProjects.length + openProposals.length;
   const { currentSeason, metrics, activity } = league;
   const workbenchItems = submittedFirstProject ? [...openProjects, ...openProposals] : openProjects;
   const isYoungerTrack = gradeBand === "GRADE_5_6" && !submittedFirstProject;
+  const nextMove = dailyMission ?? recommendedAction;
 
   return (
     <div className="space-y-10">
@@ -187,16 +199,26 @@ export function StudentDashboard({
 
         <article className="rounded-[28px] border border-accent/20 bg-accent/5 p-6 shadow-panel">
           <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">
-            {isYoungerTrack ? "Do this next" : "Best next move"}
+            {dailyMission ? "AI daily mission" : isYoungerTrack ? "Do this next" : "Best next move"}
           </p>
-          <h3 className="mt-3 font-display text-3xl text-ink">{recommendedAction.title}</h3>
-          <p className="mt-4 text-sm leading-6 text-ink/72">{recommendedAction.body}</p>
+          <h3 className="mt-3 font-display text-3xl text-ink">{nextMove.title}</h3>
+          <p className="mt-4 text-sm leading-6 text-ink/72">{nextMove.body}</p>
+          {dailyMission?.reason ? (
+            <p className="mt-4 rounded-2xl border border-accent/20 bg-white/75 px-4 py-3 text-sm leading-6 text-ink/68">
+              {dailyMission.reason}
+            </p>
+          ) : null}
+          {dailyMission?.milestoneKey ? (
+            <p className="mt-3 font-mono text-[11px] uppercase tracking-[0.18em] text-ink/55">
+              Focus: {dailyMission.milestoneKey.toLowerCase().replaceAll("_", " ")}
+            </p>
+          ) : null}
           <div className="mt-6 flex flex-wrap gap-3">
             <Link
-              href={recommendedAction.href}
+              href={nextMove.href}
               className="rounded-full border border-accent bg-accent px-4 py-2 text-sm font-medium text-white"
             >
-              {recommendedAction.ctaLabel}
+              {nextMove.ctaLabel}
             </Link>
             <Link
               href="/students/me"

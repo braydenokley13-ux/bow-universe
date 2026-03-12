@@ -1,6 +1,8 @@
 import {
+  AiArtifactKind,
   IssueStatus,
   Prisma,
+  ProjectCampaignEventKind,
   ProjectType,
   ProjectScale,
   ProposalStatus,
@@ -35,11 +37,119 @@ import type {
 } from "@/lib/types";
 import { parseRules } from "@/lib/rules";
 import { calculateLeagueMetrics } from "@/lib/sim";
+import { deriveProjectAiReadiness, syncProjectAiCampaignState } from "@/server/ai/service";
+import { AI_PROMPT_VERSION } from "@/server/ai/types";
 import { canVoteOnProposal } from "@/server/workflows";
 
 function jsonValue<T>(value: Prisma.JsonValue | null | undefined) {
   return (value ?? null) as T;
 }
+
+const projectStudioProjectInclude = {
+  primaryIssue: true,
+  milestones: {
+    orderBy: { targetDate: "asc" }
+  },
+  deliverables: true,
+  campaignEvents: {
+    include: {
+      actor: {
+        select: {
+          id: true,
+          name: true
+        }
+      }
+    },
+    orderBy: { createdAt: "desc" }
+  },
+  issueLinks: {
+    include: {
+      issue: true
+    }
+  },
+  collaborators: true,
+  feedbackEntries: {
+    include: {
+      createdBy: {
+        select: {
+          name: true
+        }
+      }
+    },
+    orderBy: {
+      createdAt: "desc"
+    }
+  },
+  aiArtifacts: {
+    include: {
+      sources: {
+        orderBy: {
+          rank: "asc"
+        }
+      },
+      run: true
+    },
+    orderBy: {
+      createdAt: "desc"
+    }
+  }
+} satisfies Prisma.ProjectInclude;
+
+const projectPageInclude = {
+  createdBy: true,
+  team: true,
+  primaryIssue: true,
+  supportingProposal: true,
+  milestones: {
+    orderBy: { targetDate: "asc" }
+  },
+  deliverables: true,
+  campaignEvents: {
+    include: {
+      actor: true
+    },
+    orderBy: { createdAt: "desc" }
+  },
+  issueLinks: {
+    include: {
+      issue: true
+    }
+  },
+  collaborators: {
+    include: {
+      user: true
+    }
+  },
+  comments: {
+    include: {
+      user: true
+    },
+    orderBy: { createdAt: "asc" }
+  },
+  feedbackEntries: {
+    include: {
+      createdBy: true
+    },
+    orderBy: { createdAt: "desc" }
+  },
+  revisions: {
+    include: {
+      createdBy: true
+    },
+    orderBy: { createdAt: "desc" }
+  },
+  aiArtifacts: {
+    include: {
+      sources: {
+        orderBy: {
+          rank: "asc"
+        }
+      },
+      run: true
+    },
+    orderBy: { createdAt: "desc" }
+  }
+} satisfies Prisma.ProjectInclude;
 
 export async function getCurrentSeason() {
   return prisma.season.findFirst({
@@ -328,49 +438,10 @@ export async function getProjectsPageData() {
 }
 
 export async function getProjectPageData(projectId: string) {
-  const project = await prisma.project.findUnique({
+  const project: Prisma.ProjectGetPayload<{ include: typeof projectPageInclude }> | null =
+    await prisma.project.findUnique({
     where: { id: projectId },
-    include: {
-      createdBy: true,
-      team: true,
-      primaryIssue: true,
-      supportingProposal: true,
-      milestones: {
-        orderBy: { targetDate: "asc" }
-      },
-      deliverables: true,
-      campaignEvents: {
-        orderBy: { createdAt: "desc" }
-      },
-      issueLinks: {
-        include: {
-          issue: true
-        }
-      },
-      collaborators: {
-        include: {
-          user: true
-        }
-      },
-      comments: {
-        include: {
-          user: true
-        },
-        orderBy: { createdAt: "asc" }
-      },
-      feedbackEntries: {
-        include: {
-          createdBy: true
-        },
-        orderBy: { createdAt: "desc" }
-      },
-      revisions: {
-        include: {
-          createdBy: true
-        },
-        orderBy: { createdAt: "desc" }
-      }
-    }
+    include: projectPageInclude
   });
 
   if (!project) {
@@ -609,6 +680,14 @@ export async function getAdminPublicationsData() {
 }
 
 export async function getProjectStudioData(projectId?: string) {
+  const projectPromise: Promise<Prisma.ProjectGetPayload<{ include: typeof projectStudioProjectInclude }> | null> =
+    projectId
+      ? prisma.project.findUnique({
+          where: { id: projectId },
+          include: projectStudioProjectInclude
+        })
+      : Promise.resolve(null);
+
   const [issueRecords, teams, users, proposals, project] = await Promise.all([
     prisma.issue.findMany({
       where: { status: { in: [IssueStatus.OPEN, IssueStatus.IN_REVIEW] } },
@@ -636,39 +715,7 @@ export async function getProjectStudioData(projectId?: string) {
       },
       orderBy: { createdAt: "desc" }
     }),
-    projectId
-      ? prisma.project.findUnique({
-          where: { id: projectId },
-          include: {
-            primaryIssue: true,
-            milestones: {
-              orderBy: { targetDate: "asc" }
-            },
-            deliverables: true,
-            campaignEvents: {
-              orderBy: { createdAt: "desc" }
-            },
-            issueLinks: {
-              include: {
-                issue: true
-              }
-            },
-            collaborators: true,
-            feedbackEntries: {
-              include: {
-                createdBy: {
-                  select: {
-                    name: true
-                  }
-                }
-              },
-              orderBy: {
-                createdAt: "desc"
-              }
-            }
-          }
-        })
-      : null
+    projectPromise
   ]);
 
   const issues = [...issueRecords];
@@ -790,6 +837,13 @@ export function parseProjectJson(project: {
     artifactUrl: string | null;
   }>;
   feedbackEntries?: Array<unknown>;
+  aiArtifacts?: Array<{
+    id: string;
+    kind: string;
+    inputHash: string;
+    structuredJson: Prisma.JsonValue | null;
+    updatedAt: Date;
+  }>;
 }) {
   const laneTags = jsonValue<LaneTag[]>(project.laneTagsJson) ?? [];
   const lanePrimary = (project.lanePrimary as LaneTag | null) ?? getPrimaryLaneTag(
@@ -805,6 +859,32 @@ export function parseProjectJson(project: {
   const artifactFocus =
     (project.artifactFocus as ReturnType<typeof getArtifactFocusForProjectType> | null) ??
     getArtifactFocusForProjectType(project.projectType ?? ProjectType.INVESTIGATION);
+  const aiReadiness = project.aiArtifacts
+    ? deriveProjectAiReadiness({
+        project: {
+          id: project.id ?? "",
+          issueId: project.issueId ?? null,
+          essentialQuestion: project.essentialQuestion ?? null,
+          summary: project.summary ?? "",
+          abstract: project.abstract ?? null,
+          deliverables: (project.deliverables ?? []).map((deliverable) => ({
+            ...deliverable,
+            title: "",
+            required: true,
+            complete: Boolean(deliverable.contentMd?.trim() || deliverable.artifactUrl)
+          })),
+          aiArtifacts: project.aiArtifacts.map((artifact) => ({
+            ...artifact,
+            kind: artifact.kind as AiArtifactKind,
+            bodyMd: "",
+            promptVersion: AI_PROMPT_VERSION,
+            createdAt: artifact.updatedAt
+          }))
+        },
+        content,
+        references
+      } as Parameters<typeof deriveProjectAiReadiness>[0])
+    : null;
   const campaign = buildProjectCampaignAssessment({
     scale,
     artifactFocus,
@@ -838,7 +918,15 @@ export function parseProjectJson(project: {
       key: deliverable.key,
       contentMd: deliverable.contentMd,
       artifactUrl: deliverable.artifactUrl
-    }))
+    })),
+    aiReadiness: aiReadiness
+      ? {
+          researchFresh: aiReadiness.researchFresh,
+          argumentFresh: aiReadiness.argumentFresh,
+          adversaryPassed: aiReadiness.adversaryPassed,
+          qualityPassed: aiReadiness.qualityPassed
+        }
+      : undefined
   });
 
   return {
@@ -962,6 +1050,24 @@ export async function getCohortProgress(cohortId: string) {
 
   const memberIds = cohort.members.map((m) => m.userId);
 
+  const extendedProjectIds = await prisma.project.findMany({
+    where: {
+      createdByUserId: { in: memberIds },
+      scale: ProjectScale.EXTENDED
+    },
+    select: {
+      id: true
+    }
+  });
+
+  if (extendedProjectIds.length > 0) {
+    await Promise.all(
+      extendedProjectIds.map((project) =>
+        syncProjectAiCampaignState(project.id).catch(() => null)
+      )
+    );
+  }
+
   const [users, projects, proposals] = await Promise.all([
     prisma.user.findMany({
       where: { id: { in: memberIds } },
@@ -969,7 +1075,35 @@ export async function getCohortProgress(cohortId: string) {
     }),
     prisma.project.findMany({
       where: { createdByUserId: { in: memberIds } },
-      select: { id: true, title: true, submissionStatus: true, createdByUserId: true, updatedAt: true }
+      select: {
+        id: true,
+        title: true,
+        submissionStatus: true,
+        createdByUserId: true,
+        updatedAt: true,
+        scale: true,
+        milestones: {
+          select: {
+            key: true,
+            status: true
+          },
+          orderBy: {
+            targetDate: "asc"
+          }
+        },
+        campaignEvents: {
+          select: {
+            kind: true,
+            createdAt: true,
+            milestoneKey: true,
+            actorUserId: true,
+            metadataJson: true
+          },
+          orderBy: {
+            createdAt: "desc"
+          }
+        }
+      }
     }),
     prisma.proposal.findMany({
       where: { createdByUserId: { in: memberIds } },
@@ -977,9 +1111,44 @@ export async function getCohortProgress(cohortId: string) {
     })
   ]);
 
+  function readTeamPulseStatus(value: Prisma.JsonValue | null | undefined) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      return null;
+    }
+
+    const status = value.status;
+    return status === "healthy" || status === "watch" || status === "risk" ? status : null;
+  }
+
   const rows = users.map((user) => {
     const userProjects = projects.filter((p) => p.createdByUserId === user.id);
     const userProposals = proposals.filter((p) => p.createdByUserId === user.id);
+    const activeCampaignProject =
+      userProjects.find((project) =>
+        project.milestones.some((milestone) => milestone.status === "ACTIVE")
+      ) ??
+      userProjects.find((project) => project.scale === ProjectScale.EXTENDED) ??
+      null;
+    const activeMilestone =
+      activeCampaignProject?.milestones.find((milestone) => milestone.status === "ACTIVE") ?? null;
+    const lastHumanProgressAt =
+      activeCampaignProject?.campaignEvents.find(
+        (event) =>
+          event.kind === ProjectCampaignEventKind.PROGRESS_UPDATE &&
+          event.actorUserId &&
+          (!activeMilestone || event.milestoneKey === activeMilestone.key)
+      )?.createdAt ?? null;
+    const latestStallSignal =
+      activeCampaignProject?.campaignEvents.find(
+        (event) =>
+          event.kind === ProjectCampaignEventKind.STALL_ALERT &&
+          (!activeMilestone || event.milestoneKey === activeMilestone.key)
+      ) ?? null;
+    const latestTeamPulse =
+      activeCampaignProject?.campaignEvents.find(
+        (event) => event.kind === ProjectCampaignEventKind.TEAM_PULSE
+      ) ?? null;
+    const teamPulseStatus = readTeamPulseStatus(latestTeamPulse?.metadataJson);
     const lastActivity = [...userProjects, ...userProposals]
       .map((x) => x.updatedAt)
       .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
@@ -990,7 +1159,17 @@ export async function getCohortProgress(cohortId: string) {
       proposals: userProposals,
       totalWork: userProjects.length + userProposals.length,
       hasNoActivity: userProjects.length === 0 && userProposals.length === 0,
-      lastActivity
+      lastActivity,
+      activeProjectId: activeCampaignProject?.id ?? null,
+      activeProjectTitle: activeCampaignProject?.title ?? null,
+      activeMilestoneKey: activeMilestone?.key ?? null,
+      lastHumanProgressAt,
+      hasActiveStallSignal:
+        Boolean(latestStallSignal) &&
+        (!lastHumanProgressAt ||
+          latestStallSignal!.createdAt.getTime() >= lastHumanProgressAt.getTime()),
+      hasUnresolvedTeamPulse:
+        teamPulseStatus === "watch" || teamPulseStatus === "risk"
     };
   });
 

@@ -13,6 +13,28 @@ import {
 import { updateProjectAction } from "@/server/actions";
 import { getViewer, requireUser } from "@/server/auth";
 import { getProjectStudioData, parseProjectJson } from "@/server/data";
+import { canUserEditProjectDraft } from "@/server/project-access";
+
+function getRepairItems(project: { updatedAt: Date } & Record<string, unknown>) {
+  const feedbackEntries = Array.isArray(project.feedbackEntries)
+    ? (project.feedbackEntries as Array<{
+        id: string;
+        sectionKey: string;
+        body: string;
+        createdAt: Date;
+        createdBy: { name: string } | string;
+      }>)
+    : [];
+
+  return feedbackEntries
+    .filter((entry) => entry.createdAt.getTime() >= project.updatedAt.getTime())
+    .map((entry) => ({
+      id: entry.id,
+      sectionKey: entry.sectionKey,
+      body: entry.body,
+      createdBy: entry.createdBy
+    }));
+}
 
 export default async function EditProjectPage({
   params,
@@ -32,7 +54,7 @@ export default async function EditProjectPage({
 
   await requireUser();
 
-  if (viewer?.id !== project.createdByUserId && viewer?.role !== "ADMIN") {
+  if (!viewer || !canUserEditProjectDraft(project, viewer.id, viewer.role)) {
     notFound();
   }
 
@@ -95,14 +117,7 @@ export default async function EditProjectPage({
         proposals={proposals}
         intentLabel="Resubmit for review"
         beginnerMode={beginnerMode}
-        repairItems={project.feedbackEntries
-          .filter((entry) => entry.createdAt.getTime() >= project.updatedAt.getTime())
-          .map((entry) => ({
-            id: entry.id,
-            sectionKey: entry.sectionKey,
-            body: entry.body,
-            createdBy: entry.createdBy
-          }))}
+        repairItems={getRepairItems(project)}
         initial={{
           id: project.id,
           projectScale: parsed.scale,

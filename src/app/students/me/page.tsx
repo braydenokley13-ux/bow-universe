@@ -135,6 +135,52 @@ export default async function StudentPortfolioPage({
         </div>
       </section>
 
+      <section className="panel p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">Progress narrative</p>
+            <h3 className="mt-3 font-display text-2xl text-ink">What your work has actually become</h3>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-ink/70">
+              Each paragraph marks a completed project milestone and describes the intellectual work you actually finished.
+            </p>
+          </div>
+          <Badge tone={portfolio.narratives.length > 0 ? "success" : "default"}>
+            {portfolio.narratives.length} entries
+          </Badge>
+        </div>
+
+        {portfolio.narratives.length > 0 ? (
+          <div className="mt-6 space-y-4">
+            {portfolio.narratives.map((entry) => (
+              <article key={entry.id} className="rounded-2xl border border-line bg-white/60 p-5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="font-medium text-ink">{entry.projectTitle}</p>
+                    <p className="mt-1 font-mono text-[11px] uppercase tracking-[0.18em] text-accent">
+                      {entry.milestoneKey ? entry.milestoneKey.toLowerCase().replaceAll("_", " ") : "project milestone"}
+                    </p>
+                  </div>
+                  <p className="text-xs uppercase tracking-[0.18em] text-ink/50">
+                    {entry.createdAt.toLocaleDateString("en-US")}
+                  </p>
+                </div>
+                <p className="mt-4 text-sm leading-7 text-ink/72">{entry.paragraph}</p>
+                <Link
+                  href={`/projects/${entry.projectId}`}
+                  className="mt-4 inline-block text-sm font-medium text-accent hover:underline"
+                >
+                  Open project
+                </Link>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="mt-6 rounded-2xl border border-dashed border-line px-4 py-5 text-sm leading-6 text-ink/60">
+            Complete a project milestone and the AI will write the first portfolio narrative here.
+          </div>
+        )}
+      </section>
+
       <StudentOutcomeLedger
         outcomes={portfolio.outcomes}
         pendingVerificationCount={portfolio.pendingVerificationCount}

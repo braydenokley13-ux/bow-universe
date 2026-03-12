@@ -9,6 +9,7 @@ import { buildDashboardGuidance } from "@/lib/discovery-guidance";
 import { shouldForceStudentOnboarding } from "@/lib/student-onboarding";
 import { formatCompactCurrency } from "@/lib/utils";
 import { advanceSeasonAction } from "@/server/actions";
+import { runStudentMission } from "@/server/ai/service";
 import { getViewer } from "@/server/auth";
 import {
   getDashboardData,
@@ -76,9 +77,10 @@ export default async function HomePage() {
       redirect("/start?tour=1");
     }
 
-    const [missionControl, league] = await Promise.all([
+    const [missionControl, league, dailyMission] = await Promise.all([
       getStudentMissionControlData(viewer.id),
-      getDashboardData()
+      getDashboardData(),
+      runStudentMission(viewer.id).catch(() => null)
     ]);
 
     return (
@@ -98,6 +100,7 @@ export default async function HomePage() {
         researchStageProgress={missionControl.researchStageProgress}
         nextResearchStep={missionControl.nextResearchStep}
         simulationPreviewAvailable={missionControl.simulationPreviewAvailable}
+        dailyMission={dailyMission?.data ?? null}
         league={league}
       />
     );

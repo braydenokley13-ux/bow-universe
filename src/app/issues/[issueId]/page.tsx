@@ -9,6 +9,8 @@ import { ResearchStageMap } from "@/components/research-stage-map";
 import { SectionHeading } from "@/components/section-heading";
 import { buildIssueResearchPreview, classifyIssueWorkGap } from "@/lib/discovery-guidance";
 import { buildProjectStudioHref, buildProposalStudioHref } from "@/lib/studio-entry";
+import { getViewer } from "@/server/auth";
+import { runIssueIntel } from "@/server/ai/service";
 import { parseIssueMetrics, getIssuePageData } from "@/server/data";
 
 function metricMeaning(label: string, value: number | null | undefined) {
@@ -21,11 +23,18 @@ function metricMeaning(label: string, value: number | null | undefined) {
 
 export default async function IssueDetailPage({ params }: { params: Promise<{ issueId: string }> }) {
   const { issueId } = await params;
-  const issue = await getIssuePageData(issueId);
+  const [issue, viewer] = await Promise.all([getIssuePageData(issueId), getViewer()]);
 
   if (!issue) {
     notFound();
   }
+
+  const issueIntel = viewer
+    ? await runIssueIntel({
+        userId: viewer.id,
+        issueId: issue.id
+      }).catch(() => null)
+    : null;
 
   const metrics = parseIssueMetrics(issue.metricsJson);
   const gap = classifyIssueWorkGap({
@@ -199,6 +208,73 @@ export default async function IssueDetailPage({ params }: { params: Promise<{ is
             }
             tone={gap.missing.length > 0 ? "warn" : "success"}
           />
+
+          <section className="panel p-6">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-accent">AI issue intelligence</p>
+                <h3 className="mt-3 font-display text-2xl text-ink">What makes this issue hard</h3>
+              </div>
+              <Badge tone={issueIntel ? "success" : "default"}>
+                {issueIntel ? "Live briefing" : "Sign in for AI"}
+              </Badge>
+            </div>
+
+            {issueIntel ? (
+              <div className="mt-5 space-y-4">
+                <div className="rounded-2xl border border-line bg-white/60 p-4">
+                  <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">What is hard</p>
+                  <ul className="mt-3 space-y-2 text-sm leading-6 text-ink/68">
+                    {issueIntel.data.whatIsHard.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="rounded-2xl border border-line bg-white/60 p-4">
+                  <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Real debate</p>
+                  <p className="mt-3 text-sm leading-6 text-ink/68">{issueIntel.data.realDebate}</p>
+                </div>
+                <div className="rounded-2xl border border-line bg-white/60 p-4">
+                  <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Stakeholders</p>
+                  <ul className="mt-3 space-y-2 text-sm leading-6 text-ink/68">
+                    {issueIntel.data.stakeholders.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="rounded-2xl border border-success/20 bg-success/10 p-4">
+                    <p className="font-mono text-xs uppercase tracking-[0.2em] text-success">Strong project</p>
+                    <ul className="mt-3 space-y-2 text-sm leading-6 text-success">
+                      {issueIntel.data.strongProjectLooksLike.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="rounded-2xl border border-line bg-white/60 p-4">
+                    <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">Weak project</p>
+                    <ul className="mt-3 space-y-2 text-sm leading-6 text-ink/68">
+                      {issueIntel.data.weakProjectLooksLike.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-accent/20 bg-accent/5 p-4">
+                  <p className="font-mono text-xs uppercase tracking-[0.2em] text-accent">First moves</p>
+                  <ul className="mt-3 space-y-2 text-sm leading-6 text-ink/68">
+                    {issueIntel.data.firstMoves.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-5 rounded-2xl border border-dashed border-line px-4 py-5 text-sm leading-6 text-ink/60">
+                Signed-in students can load an AI briefing here that explains the real debate, the hard part of the issue, the stakeholders, and what strong work usually looks like.
+              </div>
+            )}
+          </section>
 
           <section className="panel p-6">
             <div className="flex items-center justify-between gap-3">

@@ -9,6 +9,12 @@ type Row = {
   totalWork: number;
   hasNoActivity: boolean;
   lastActivity: Date | null;
+  activeProjectId: string | null;
+  activeProjectTitle: string | null;
+  activeMilestoneKey: string | null;
+  lastHumanProgressAt: Date | null;
+  hasActiveStallSignal: boolean;
+  hasUnresolvedTeamPulse: boolean;
 };
 
 type Milestone = {
@@ -45,6 +51,10 @@ function formatRelativeDate(date: Date | null): string {
   return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
+function formatMilestone(value: string | null) {
+  return value ? value.toLowerCase().replaceAll("_", " ") : "No active campaign";
+}
+
 export function CohortProgressTable({ rows, milestones }: Props) {
   if (rows.length === 0) {
     return (
@@ -79,6 +89,8 @@ export function CohortProgressTable({ rows, milestones }: Props) {
               <th className="pb-2 pr-4 font-mono text-[10px] uppercase tracking-[0.2em] text-ink/50">Team</th>
               <th className="pb-2 pr-4 font-mono text-[10px] uppercase tracking-[0.2em] text-ink/50">Projects</th>
               <th className="pb-2 pr-4 font-mono text-[10px] uppercase tracking-[0.2em] text-ink/50">Proposals</th>
+              <th className="pb-2 pr-4 font-mono text-[10px] uppercase tracking-[0.2em] text-ink/50">Campaign</th>
+              <th className="pb-2 pr-4 font-mono text-[10px] uppercase tracking-[0.2em] text-ink/50">Signals</th>
               <th className="pb-2 font-mono text-[10px] uppercase tracking-[0.2em] text-ink/50">Last active</th>
             </tr>
           </thead>
@@ -133,6 +145,33 @@ export function CohortProgressTable({ rows, milestones }: Props) {
                       ))}
                     </div>
                   )}
+                </td>
+                <td className="py-3 pr-4">
+                  {row.activeProjectId && row.activeProjectTitle ? (
+                    <div className="space-y-2">
+                      <Link
+                        href={`/projects/${row.activeProjectId}`}
+                        className="block font-medium text-accent hover:underline"
+                      >
+                        {row.activeProjectTitle}
+                      </Link>
+                      <Badge tone="warn">{formatMilestone(row.activeMilestoneKey)}</Badge>
+                      <p className="text-xs text-ink/50">
+                        Human progress: {formatRelativeDate(row.lastHumanProgressAt)}
+                      </p>
+                    </div>
+                  ) : (
+                    <span className="text-ink/40">No active campaign</span>
+                  )}
+                </td>
+                <td className="py-3 pr-4">
+                  <div className="flex flex-wrap gap-2">
+                    {row.hasActiveStallSignal ? <Badge tone="warn">Stall alert</Badge> : null}
+                    {row.hasUnresolvedTeamPulse ? <Badge tone="warn">Team pulse risk</Badge> : null}
+                    {!row.hasActiveStallSignal && !row.hasUnresolvedTeamPulse ? (
+                      <Badge tone="success">Healthy</Badge>
+                    ) : null}
+                  </div>
                 </td>
                 <td className="py-3 text-xs text-ink/50">
                   {formatRelativeDate(row.lastActivity)}

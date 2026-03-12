@@ -53,12 +53,15 @@ import { hasStudentSubmittedProject } from "@/lib/student-flow";
 import type { LaneTag, ReferenceEntry } from "@/lib/types";
 import { parseJsonText, parseStringList } from "@/lib/utils";
 import { requireAdmin, requireUser } from "@/server/auth";
+import { syncProjectAiCampaignState } from "@/server/ai/service";
 import { syncChallengeMilestonesForSource } from "@/server/challenges";
 import { parseProjectJson } from "@/server/data";
 import {
+  createProjectCampaignProgressEvent,
   createProjectCampaignFeedbackEvent,
   syncProjectCampaignState
 } from "@/server/project-campaign";
+import { canUserEditProjectDraft } from "@/server/project-access";
 import {
   snapshotProjectRevision,
   snapshotProposalRevision,
@@ -397,7 +400,10 @@ async function saveProjectRecord(params: {
       })
     : null;
 
-  if (existing && existing.createdByUserId !== params.actor.id && params.actor.role !== "ADMIN") {
+  if (
+    existing &&
+    !canUserEditProjectDraft(existing, params.actor.id, params.actor.role)
+  ) {
     redirect(`/projects/${existing.id}`);
   }
 
@@ -597,38 +603,70 @@ async function saveProjectRecord(params: {
         }
       });
 
+  const campaignAssessment = buildProjectCampaignAssessment({
+    scale: projectScale,
+    artifactFocus,
+    issueId,
+    issueSeverity: null,
+    title: parsed.title,
+    summary: parsed.summary,
+    abstract: parsed.abstract,
+    essentialQuestion: parsed.essentialQuestion,
+    methodsSummary: parsed.methodsSummary,
+    overview,
+    context,
+    evidence,
+    analysis,
+    recommendations,
+    reflection,
+    missionGoal: missionGoal ?? "",
+    successCriteria: successCriteria ?? "",
+    targetLaunchDate,
+    keyTakeaways,
+    artifactLinks,
+    references,
+    laneSections: content.laneSections,
+    feedbackCount: existing?._count.feedbackEntries ?? 0,
+    milestoneInputs: campaignMilestones,
+    deliverableInputs: campaignDeliverables
+  });
+
   await syncProjectCampaignState({
     db: prisma,
     projectId: project.id,
     scale: projectScale,
-    assessment: buildProjectCampaignAssessment({
-      scale: projectScale,
-      artifactFocus,
-      issueId,
-      issueSeverity: null,
-      title: parsed.title,
-      summary: parsed.summary,
-      abstract: parsed.abstract,
-      essentialQuestion: parsed.essentialQuestion,
-      methodsSummary: parsed.methodsSummary,
-      overview,
-      context,
-      evidence,
-      analysis,
-      recommendations,
-      reflection,
-      missionGoal: missionGoal ?? "",
-      successCriteria: successCriteria ?? "",
-      targetLaunchDate,
-      keyTakeaways,
-      artifactLinks,
-      references,
-      laneSections: content.laneSections,
-      feedbackCount: existing?._count.feedbackEntries ?? 0,
-      milestoneInputs: campaignMilestones,
-      deliverableInputs: campaignDeliverables
-    })
+    assessment: campaignAssessment
   });
+
+  if (projectScale === ProjectScale.EXTENDED) {
+    await createProjectCampaignProgressEvent({
+      db: prisma,
+      projectId: project.id,
+      milestoneKey: campaignAssessment.activeMilestoneKey,
+      actorUserId: params.actor.id,
+      body: "Saved project progress in the campaign workspace."
+    });
+  }
+
+  const aiSyncResult =
+    projectScale === ProjectScale.EXTENDED
+      ? await syncProjectAiCampaignState(project.id)
+      : null;
+
+  if (
+    submissionStatus === SubmissionStatus.SUBMITTED &&
+    projectScale === ProjectScale.EXTENDED &&
+    !aiSyncResult?.assessment.launchReady
+  ) {
+    await prisma.project.update({
+      where: { id: project.id },
+      data: {
+        submissionStatus: SubmissionStatus.DRAFT
+      }
+    });
+
+    throw new Error("Clear the launch-week AI gates before submitting this campaign.");
+  }
 
   await syncProjectPublication({
     projectId: project.id,
@@ -1161,7 +1199,8 @@ export async function saveProjectFeedbackAction(formData: FormData) {
       db: prisma,
       projectId,
       milestoneKey,
-      body
+      body,
+      actorUserId: viewer.id
     });
 
     await syncProjectCampaignState({

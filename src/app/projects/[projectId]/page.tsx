@@ -43,9 +43,6 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
   const readiness = getProjectReviewReadiness(project);
   const canEdit = viewer?.id === project.createdByUserId || viewer?.role === "ADMIN";
   const isExtendedProject = project.scale === ProjectScale.EXTENDED;
-  const daysToLaunch = project.targetLaunchDate
-    ? Math.ceil((project.targetLaunchDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-    : null;
   const jumpSections = [
     ...(isExtendedProject
       ? ([
@@ -120,9 +117,14 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
 
                   <div className="mt-6 grid gap-3 sm:grid-cols-3">
                     <div className="rounded-[24px] border border-line bg-white/78 p-4">
-                      <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Countdown</p>
+                      <p className="font-mono text-[11px] uppercase tracking-[0.22em] text-accent">Target date</p>
                       <p className="mt-3 text-3xl font-semibold text-ink">
-                        {daysToLaunch === null ? "No date" : `${Math.max(daysToLaunch, 0)}d`}
+                        {project.targetLaunchDate
+                          ? project.targetLaunchDate.toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric"
+                            })
+                          : "No date"}
                       </p>
                       <p className="mt-2 text-sm leading-6 text-ink/62">
                         {project.targetLaunchDate?.toLocaleDateString() ?? "Target date not set yet."}

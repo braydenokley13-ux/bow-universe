@@ -1,4 +1,5 @@
 import {
+  AiArtifactKind,
   IssueStatus,
   ProposalStatus,
   PublicationSourceType,
@@ -1380,6 +1381,14 @@ export async function getStudentPortfolioData(userId: string) {
         },
         feedbackEntries: {
           orderBy: { createdAt: "desc" }
+        },
+        aiArtifacts: {
+          where: {
+            kind: AiArtifactKind.NARRATIVE
+          },
+          orderBy: {
+            createdAt: "desc"
+          }
         }
       },
       orderBy: { updatedAt: "desc" }
@@ -1670,6 +1679,19 @@ export async function getStudentPortfolioData(userId: string) {
     .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime())
     .slice(0, 18);
 
+  const narratives = projects
+    .flatMap((project) =>
+      project.aiArtifacts.map((artifact) => ({
+        id: artifact.id,
+        projectId: project.id,
+        projectTitle: project.title,
+        milestoneKey: artifact.milestoneKey,
+        paragraph: artifact.bodyMd,
+        createdAt: artifact.updatedAt
+      }))
+    )
+    .sort((left, right) => right.createdAt.getTime() - left.createdAt.getTime());
+
   return {
     user,
     projects,
@@ -1685,6 +1707,7 @@ export async function getStudentPortfolioData(userId: string) {
       ...entry,
       totalScore: entry.scoreEvents.reduce((total, event) => total + event.points, 0)
     })),
+    narratives,
     growthTimeline,
     outcomes,
     outcomeStats,

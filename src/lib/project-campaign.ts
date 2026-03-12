@@ -65,6 +65,12 @@ export type ProjectCampaignAssessmentInput = {
   feedbackCount?: number;
   milestoneInputs?: ProjectCampaignMilestoneInput[];
   deliverableInputs?: ProjectCampaignDeliverableInput[];
+  aiReadiness?: {
+    researchFresh: boolean;
+    argumentFresh: boolean;
+    adversaryPassed: boolean;
+    qualityPassed: boolean;
+  };
 };
 
 export type ProjectCampaignMilestoneAssessment = {
@@ -412,7 +418,22 @@ export function buildProjectCampaignAssessment(
     hasText(input.overview, 24) ? null : "Write the dossier opening.",
     hasText(input.context, 24) ? null : "Explain why the issue matters now.",
     hasText(input.evidence, 40) ? null : "Add deeper evidence notes.",
-    input.references.length > 0 ? null : "Add at least one reference."
+    input.references.length > 0 ? null : "Add at least one reference.",
+    input.aiReadiness
+      ? input.aiReadiness.researchFresh
+        ? null
+        : "Run the AI research coach on the current evidence board."
+      : null,
+    input.aiReadiness
+      ? input.aiReadiness.argumentFresh
+        ? null
+        : "Use the argument architect to turn the research into a real position."
+      : null,
+    input.aiReadiness
+      ? input.aiReadiness.adversaryPassed
+        ? null
+        : "Clear the adversarial mentor before the build sprint unlocks."
+      : null
   ].filter(Boolean) as string[];
   const buildMissing = [
     hasText(input.methodsSummary, 24) ? null : "Explain the build or method clearly.",
@@ -431,6 +452,10 @@ export function buildProjectCampaignAssessment(
   const launchMissing = deliverables
     .filter((deliverable) => !deliverable.complete)
     .map((deliverable) => `Finish ${deliverable.title.toLowerCase()}.`);
+
+  if (input.aiReadiness && !input.aiReadiness.qualityPassed) {
+    launchMissing.push("Clear the AI quality gate on the current artifact suite.");
+  }
 
   const milestoneMissingMap = new Map<ProjectMilestoneKey, string[]>([
     [ProjectMilestoneKey.CHARTER, charterMissing],

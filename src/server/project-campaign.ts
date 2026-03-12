@@ -1,5 +1,6 @@
 import {
   ProjectCampaignEventKind,
+  Prisma,
   PrismaClient,
   ProjectMilestoneKey,
   ProjectMilestoneStatus,
@@ -13,6 +14,12 @@ type ProjectCampaignDb = Pick<
   "projectMilestone" | "projectDeliverable" | "projectCampaignEvent"
 > &
   Partial<Pick<PrismaClient, "activityEvent">>;
+
+function startOfDay(date: Date) {
+  const value = new Date(date);
+  value.setHours(0, 0, 0, 0);
+  return value;
+}
 
 async function createActivityMirror(
   db: ProjectCampaignDb,
@@ -219,12 +226,14 @@ export async function createProjectCampaignFeedbackEvent(params: {
   projectId: string;
   milestoneKey: ProjectMilestoneKey | null;
   body: string;
+  actorUserId?: string | null;
 }) {
   await params.db.projectCampaignEvent.create({
     data: {
       projectId: params.projectId,
       kind: ProjectCampaignEventKind.FEEDBACK,
       milestoneKey: params.milestoneKey,
+      actorUserId: params.actorUserId ?? null,
       title: params.milestoneKey ? `Feedback on ${params.milestoneKey.toLowerCase().replaceAll("_", " ")}` : "Project feedback added",
       body: params.body
     }
@@ -238,4 +247,172 @@ export async function createProjectCampaignFeedbackEvent(params: {
     summary: params.body,
     projectId: params.projectId
   });
+}
+
+export async function createProjectCampaignProgressEvent(params: {
+  db: ProjectCampaignDb;
+  projectId: string;
+  milestoneKey: ProjectMilestoneKey | null;
+  actorUserId: string;
+  body: string;
+  now?: Date;
+}) {
+  const now = params.now ?? new Date();
+  const existingToday = await params.db.projectCampaignEvent.findMany({
+    where: {
+      projectId: params.projectId,
+      kind: ProjectCampaignEventKind.PROGRESS_UPDATE,
+      milestoneKey: params.milestoneKey,
+      actorUserId: params.actorUserId,
+      createdAt: {
+        gte: startOfDay(now)
+      }
+    },
+    orderBy: {
+      createdAt: "desc"
+    },
+    take: 1
+  });
+
+  if (existingToday.length > 0) {
+    return existingToday[0];
+  }
+
+  const title = params.milestoneKey
+    ? `Progress update on ${params.milestoneKey.toLowerCase().replaceAll("_", " ")}`
+    : "Project progress update";
+
+  const event = await params.db.projectCampaignEvent.create({
+    data: {
+      projectId: params.projectId,
+      kind: ProjectCampaignEventKind.PROGRESS_UPDATE,
+      milestoneKey: params.milestoneKey,
+      actorUserId: params.actorUserId,
+      title,
+      body: params.body
+    }
+  });
+
+  await createActivityMirror(params.db, {
+    type: "PROJECT_CAMPAIGN_PROGRESS",
+    title,
+    summary: params.body,
+    projectId: params.projectId
+  });
+
+  return event;
+}
+
+export async function createProjectCampaignAiGuidanceEvent(params: {
+  db: ProjectCampaignDb;
+  projectId: string;
+  milestoneKey: ProjectMilestoneKey | null;
+  actorUserId?: string | null;
+  title: string;
+  body: string;
+  metadata?: Prisma.InputJsonObject | null;
+}) {
+  const event = await params.db.projectCampaignEvent.create({
+    data: {
+      projectId: params.projectId,
+      kind: ProjectCampaignEventKind.AI_GUIDANCE,
+      milestoneKey: params.milestoneKey,
+      actorUserId: params.actorUserId ?? null,
+      title: params.title,
+      body: params.body,
+      metadataJson: params.metadata ?? undefined
+    }
+  });
+
+  await createActivityMirror(params.db, {
+    type: "PROJECT_CAMPAIGN_AI_GUIDANCE",
+    title: params.title,
+    summary: params.body,
+    projectId: params.projectId
+  });
+
+  return event;
+}
+
+export async function createProjectCampaignTeamPulseEvent(params: {
+  db: ProjectCampaignDb;
+  projectId: string;
+  milestoneKey: ProjectMilestoneKey | null;
+  actorUserId?: string | null;
+  title: string;
+  body: string;
+  metadata?: Prisma.InputJsonObject | null;
+}) {
+  const event = await params.db.projectCampaignEvent.create({
+    data: {
+      projectId: params.projectId,
+      kind: ProjectCampaignEventKind.TEAM_PULSE,
+      milestoneKey: params.milestoneKey,
+      actorUserId: params.actorUserId ?? null,
+      title: params.title,
+      body: params.body,
+      metadataJson: params.metadata ?? undefined
+    }
+  });
+
+  await createActivityMirror(params.db, {
+    type: "PROJECT_CAMPAIGN_TEAM_PULSE",
+    title: params.title,
+    summary: params.body,
+    projectId: params.projectId
+  });
+
+  return event;
+}
+
+export async function createProjectCampaignStallEvent(params: {
+  db: ProjectCampaignDb;
+  projectId: string;
+  milestoneKey: ProjectMilestoneKey | null;
+  actorUserId?: string | null;
+  title: string;
+  body: string;
+  metadata?: Prisma.InputJsonObject | null;
+  now?: Date;
+}) {
+  const now = params.now ?? new Date();
+  const existingToday = await params.db.projectCampaignEvent.findMany({
+    where: {
+      projectId: params.projectId,
+      kind: ProjectCampaignEventKind.STALL_ALERT,
+      milestoneKey: params.milestoneKey,
+      createdAt: {
+        gte: startOfDay(now)
+      }
+    },
+    orderBy: {
+      createdAt: "desc"
+    },
+    take: 1
+  });
+
+  if (existingToday.length > 0) {
+    return existingToday[0];
+  }
+
+  const event = await params.db.projectCampaignEvent.create({
+    data: {
+      projectId: params.projectId,
+      kind: ProjectCampaignEventKind.STALL_ALERT,
+      milestoneKey: params.milestoneKey,
+      actorUserId: params.actorUserId ?? null,
+      title: params.title,
+      body: params.body,
+      metadataJson: params.metadata ?? undefined
+    }
+  });
+
+  await createActivityMirror(params.db, {
+    type: "PROJECT_CAMPAIGN_STALL_ALERT",
+    title: params.title,
+    summary: params.body,
+    projectId: params.projectId
+  });
+
+  return event;
 }
